@@ -1,0 +1,64 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { auth } from "@/lib/firebase"
+import { onAuthStateChanged } from "firebase/auth"
+import { useRouter } from "next/navigation"
+
+export default function RoleGuard({
+  children,
+  role
+}:{
+  children: React.ReactNode
+  role: "USER" | "SUPPLIER" | "ADMIN"
+}) {
+
+  const [loading,setLoading] = useState(true)
+  const router = useRouter()
+
+  useEffect(()=>{
+
+    const unsubscribe = onAuthStateChanged(auth, async (user)=>{
+
+      if(!user){
+        router.push("/user/login")
+        return
+      }
+
+      try{
+
+        const res = await fetch(`/api/user/details?firebaseUID=${user.uid}`)
+        const data = await res.json()
+
+        if(!data.user){
+          router.push("/")
+          return
+        }
+
+        if(data.user.role !== role){
+          router.push("/")
+          return
+        }
+
+        setLoading(false)
+
+      }catch(err){
+        router.push("/")
+      }
+
+    })
+
+    return ()=>unsubscribe()
+
+  },[])
+
+  if(loading){
+    return(
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-gray-400">Verifying access...</p>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}

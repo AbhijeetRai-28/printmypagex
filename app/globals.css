@@ -19,3 +19,6 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+.input {
+  @apply bg-black/40 border border-white/10 rounded-xl p-3;
+}

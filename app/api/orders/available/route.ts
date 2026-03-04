@@ -1,29 +1,55 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
+import User from "@/models/User"
 
-export async function GET(req:Request){
+export async function GET(req: Request) {
 
-await connectDB()
+  await connectDB()
 
-const {searchParams} = new URL(req.url)
+  const { searchParams } = new URL(req.url)
 
-const supplierUID = searchParams.get("supplierUID")
+  const supplierUID = searchParams.get("supplierUID")
 
-const orders = await Order.find({
+  if (!supplierUID) {
+    return NextResponse.json(
+      { error: "Supplier UID missing" },
+      { status: 400 }
+    )
+  }
 
-status:"pending",
+  // 🔐 Verify supplier exists
+  const supplier = await User.findOne({ firebaseUID: supplierUID })
 
-$or:[
-{requestType:"global"},
-{supplierUID:supplierUID}
-]
+  if (!supplier) {
+    return NextResponse.json(
+      { error: "Supplier not found" },
+      { status: 403 }
+    )
+  }
 
-}).sort({createdAt:-1})
+  // 🔐 Ensure correct role
+  if (supplier.role !== "SUPPLIER") {
+    return NextResponse.json(
+      { error: "Access denied" },
+      { status: 403 }
+    )
+  }
 
-return NextResponse.json({
-success:true,
-orders
-})
+  const orders = await Order.find({
+
+    status: "pending",
+
+    $or: [
+      { requestType: "global" },
+      { supplierUID: supplierUID }
+    ]
+
+  }).sort({ createdAt: -1 })
+
+  return NextResponse.json({
+    success: true,
+    orders
+  })
 
 }

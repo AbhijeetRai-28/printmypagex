@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
+import User from "@/models/User"
 import { pusherServer } from "@/lib/pusher-server"
 import { v2 as cloudinary } from "cloudinary"
 import pdf from "pdf-parse/lib/pdf-parse.js"
@@ -26,7 +27,20 @@ export async function POST(req: Request) {
     const supplier = formData.get("supplier") as string
 
     if (!file) {
-      return NextResponse.json({ error: "File missing" }, { status: 400 })
+      return NextResponse.json(
+        { error: "File missing" },
+        { status: 400 }
+      )
+    }
+
+    // 🔐 Verify user exists
+    const user = await User.findOne({ firebaseUID })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 403 }
+      )
     }
 
     // Convert file to buffer
@@ -57,12 +71,14 @@ export async function POST(req: Request) {
       }
     )
 
-    // Create Order (Marketplace Mode - Option A)
+    // Create Order
     const order = await Order.create({
 
       userUID: firebaseUID,
 
-      supplierUID: requestType === "specific" ? supplier : null,
+      supplierUID: requestType === "specific"
+        ? supplier
+        : null,
 
       requestType: requestType || "global",
 
@@ -78,8 +94,12 @@ export async function POST(req: Request) {
 
     })
 
-    // 🔥 REAL-TIME BROADCAST TO SUPPLIERS
-    await pusherServer.trigger("orders", "new-order", order)
+    //  Real-time broadcast
+    await pusherServer.trigger(
+      "orders",
+      "new-order",
+      order
+    )
 
     return NextResponse.json({
       success: true,
@@ -92,9 +112,10 @@ export async function POST(req: Request) {
 
     console.error("UPLOAD ERROR:", err)
 
-    return NextResponse.json({
-      error: "Upload failed"
-    }, { status: 500 })
+    return NextResponse.json(
+      { error: "Upload failed" },
+      { status: 500 }
+    )
 
   }
 

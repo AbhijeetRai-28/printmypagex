@@ -1,5 +1,6 @@
 "use client"
 
+import RoleGuard from "@/components/RoleGuard"
 import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { pusherClient } from "@/lib/pusher-client"
@@ -27,12 +28,12 @@ export default function SupplierDashboard() {
 
     const channel = pusherClient.subscribe("orders")
 
-    // 🔥 NEW ORDER EVENT
+    // NEW ORDER EVENT
     channel.bind("new-order", function (data: any) {
       setOrders(prev => [data, ...prev])
     })
 
-    // 🔥 REMOVE WHEN ACCEPTED
+    // REMOVE WHEN ACCEPTED
     channel.bind("order-accepted", function (data: any) {
       setOrders(prev =>
         prev.filter(order => order._id !== data.orderId)
@@ -59,34 +60,45 @@ export default function SupplierDashboard() {
         supplierUID: user?.uid
       })
     })
+
   }
 
   return (
-    <div style={{ padding: "40px" }}>
 
-      <h1>Supplier Dashboard</h1>
-      <h2>Available Orders</h2>
+    <RoleGuard role="SUPPLIER">
 
-      {orders.map(order => (
+      <div style={{ padding: "40px" }}>
 
-        <div key={order._id} style={{
-          border: "1px solid #444",
-          padding: "20px",
-          marginBottom: "10px"
-        }}>
+        <h1>Supplier Dashboard</h1>
+        <h2>Available Orders</h2>
 
-          <p>Pages: {order.pages}</p>
-          <p>Print Type: {order.printType}</p>
-          <p>Estimated Price: ₹{order.estimatedPrice}</p>
+        {orders.map(order => (
 
-          <button onClick={() => acceptOrder(order._id)}>
-            Accept Order
-          </button>
+          <div
+            key={order._id}
+            style={{
+              border: "1px solid #444",
+              padding: "20px",
+              marginBottom: "10px"
+            }}
+          >
 
-        </div>
+            <p>Pages: {order.pages}</p>
+            <p>Print Type: {order.printType}</p>
+            <p>Estimated Price: ₹{order.estimatedPrice}</p>
 
-      ))}
+            <button onClick={() => acceptOrder(order._id)}>
+              Accept Order
+            </button>
 
-    </div>
+          </div>
+
+        ))}
+
+      </div>
+
+    </RoleGuard>
+
   )
+
 }
