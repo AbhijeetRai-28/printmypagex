@@ -4,72 +4,71 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged, signOut } from "firebase/auth"
+import ThemeToggle from "./ThemeToggle"
 
-export default function Navbar() {
+export default function Navbar(){
 
-  const [user, setUser] = useState<any>(null)
+const [user,setUser] = useState<any>(null)
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u)
-    })
+useEffect(()=>{
 
-    return () => unsubscribe()
-  }, [])
+const unsubscribe = onAuthStateChanged(auth,(u)=>{
+setUser(u)
+})
 
-  return (
-    <nav className="flex justify-between items-center px-8 py-6 border-b border-gray-800">
+return ()=>unsubscribe()
 
-      <Link href="/" className="text-2xl font-bold text-primary">
-        PrintMyPage
-      </Link>
+},[])
 
-      <div className="flex items-center gap-6">
+const logout = async()=>{
+await signOut(auth)
+}
 
-        <Link href="/pricing" className="hover:text-primary">
-          Pricing
-        </Link>
+return(
 
-        <Link href="/contact" className="hover:text-primary">
-          Contact
-        </Link>
+<nav className="flex justify-between items-center px-8 py-5 border-b border-gray-800 dark:border-gray-200">
 
-        <Link href="/supplier/register" className="hover:text-primary">
-          Supplier
-        </Link>
-        <Link href="/user/login">
-          Login
-        </Link>
-        <Link href="/user/register">
-          Register
-        </Link>
+<Link href="/" className="text-2xl font-bold text-green-400">
+PrintMyPage
+</Link>
 
-        {user ? (
-          <>
-            <Link
-              href="/user/dashboard"
-              className="px-4 py-2 bg-primary text-black rounded-lg font-semibold"
-            >
-              Dashboard
-            </Link>
+<div className="flex items-center gap-6">
 
-            <button
-              onClick={() => signOut(auth)}
-              className="text-red-400"
-            >
-              Logout
-            </button>
-          </>
-        ) : (
-          <Link
-            href="/user/login"
-            className="px-4 py-2 bg-primary text-black rounded-lg font-semibold"
-          >
-            Login
-          </Link>
-        )}
+<Link href="/pricing">Pricing</Link>
+<Link href="/contact">Contact</Link>
 
-      </div>
-    </nav>
-  )
+{!user && (
+<>
+<Link href="/supplier/login">Supplier</Link>
+<Link href="/user/login">Login</Link>
+<Link href="/user/register">Register</Link>
+</>
+)}
+
+{user && (
+<>
+<Link
+href="/user/dashboard"
+className="px-4 py-2 rounded-lg bg-indigo-500 text-white"
+>
+Dashboard
+</Link>
+
+<button
+onClick={logout}
+className="text-red-400"
+>
+Logout
+</button>
+</>
+)}
+
+<ThemeToggle/>
+
+</div>
+
+</nav>
+
+)
+
 }

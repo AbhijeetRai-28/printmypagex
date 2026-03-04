@@ -22,3 +22,6 @@ body {
 .input {
   @apply bg-black/40 border border-white/10 rounded-xl p-3;
 }
+*{
+transition: background-color 0.2s ease, color 0.2s ease;
+}

@@ -1,6 +1,7 @@
 import "./globals.css"
 import type { Metadata } from "next"
 import { Toaster } from "react-hot-toast"
+import { ThemeProvider } from "next-themes"
 
 export const metadata: Metadata = {
   title: "PrintMyPage",
@@ -13,8 +14,17 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="bg-dark text-white min-h-screen">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+        >
+
+        {children}
+
+        </ThemeProvider>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -25,7 +35,7 @@ export default function RootLayout({
             }
           }}
         />
-        {children}
+        
       </body>
     </html>
   )
