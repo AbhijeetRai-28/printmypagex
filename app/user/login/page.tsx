@@ -7,12 +7,25 @@ import Navbar from "@/components/Navbar"
 export default function UserLogin() {
 
   const login = async () => {
-    await signInWithPopup(auth, provider)
-    window.location.href = "/user/dashboard"
+
+    const result = await signInWithPopup(auth, provider)
+
+    const user = result.user
+
+    const res = await fetch(`/api/user/details?firebaseUID=${user.uid}`)
+    const data = await res.json()
+
+    if (data.user) {
+      window.location.href = "/user/dashboard"
+    } else {
+      window.location.href = "/complete-profile"
+    }
+
   }
 
   return (
     <div>
+
       <Navbar />
 
       <div className="flex justify-center items-center min-h-[80vh]">
@@ -33,6 +46,7 @@ export default function UserLogin() {
         </div>
 
       </div>
+
     </div>
   )
 }

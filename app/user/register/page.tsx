@@ -7,8 +7,20 @@ import { signInWithPopup } from "firebase/auth"
 export default function UserRegister() {
 
   const register = async () => {
-    await signInWithPopup(auth, provider)
-    window.location.href = "/user/dashboard"
+
+    const result = await signInWithPopup(auth, provider)
+
+    const user = result.user
+
+    const res = await fetch(`/api/user/details?firebaseUID=${user.uid}`)
+    const data = await res.json()
+
+    if (data.user) {
+      window.location.href = "/user/dashboard"
+    } else {
+      window.location.href = "/complete-profile"
+    }
+
   }
 
   return (

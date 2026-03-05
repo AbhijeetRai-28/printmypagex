@@ -32,7 +32,10 @@ export default function UserDashboard() {
   const [file, setFile] = useState<File | null>(null)
   const [alternatePhone, setAlternatePhone] = useState("")
   const [printType, setPrintType] = useState("bw")
+
+  const [requestType, setRequestType] = useState("global")
   const [supplier, setSupplier] = useState("")
+
   const [duplex, setDuplex] = useState(false)
   const [instruction, setInstruction] = useState("")
 
@@ -53,6 +56,13 @@ export default function UserDashboard() {
         const userJson = await userRes.json()
         const orderJson = await orderRes.json()
         const supJson = await supRes.json()
+
+        if (!userJson.user) {
+
+          window.location.href="/complete-profile"
+          return
+
+        }
 
         setUserData(userJson.user)
         setOrders(orderJson.orders || [])
@@ -111,7 +121,7 @@ export default function UserDashboard() {
     const user = auth.currentUser
     if(!user) return
 
-    if(!supplier){
+    if(requestType==="specific" && !supplier){
       toast.error("Select a supplier first.")
       return
     }
@@ -123,7 +133,8 @@ export default function UserDashboard() {
     formData.append("file",file)
     formData.append("printType",printType)
     formData.append("firebaseUID",user.uid)
-    formData.append("requestType","specific")
+
+    formData.append("requestType",requestType)
     formData.append("supplier",supplier)
 
     formData.append("alternatePhone",alternatePhone)
@@ -252,19 +263,38 @@ className="input w-full"
 </select>
 
 <select
-value={supplier}
-onChange={(e)=>setSupplier(e.target.value)}
+value={requestType}
+onChange={(e)=>setRequestType(e.target.value)}
 className="input w-full"
 >
-<option value="">Select Supplier</option>
+<option value="global">⚡ Global Request (Fastest)</option>
+<option value="specific">Choose Specific Supplier</option>
+</select>
 
-{suppliers.map(s=>(
-<option key={s.firebaseUID} value={s.firebaseUID}>
-{s.name} | {s.branch} Year {s.year}
-</option>
-))}
+{requestType === "global" && (
+<p className="text-sm text-gray-400">
+⚡ Your order will be visible to all suppliers. The fastest one will accept it.
+</p>
+)}
+
+{requestType === "specific" && (
+
+<select
+  value={supplier}
+  onChange={(e)=>setSupplier(e.target.value)}
+  className="input w-full"
+>
+  <option value="">Select Supplier</option>
+
+  {suppliers.map((s)=>(
+    <option key={s.firebaseUID} value={s.firebaseUID}>
+      {s.name} | {s.branch} Year {s.year}
+    </option>
+  ))}
 
 </select>
+
+)}
 
 <div className="flex items-center gap-3">
 <input

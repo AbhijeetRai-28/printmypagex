@@ -22,18 +22,14 @@ const submit = async()=>{
 const user = auth.currentUser
 
 const res = await fetch("/api/supplier/apply",{
-
 method:"POST",
-
 headers:{
 "Content-Type":"application/json"
 },
-
 body:JSON.stringify({
 firebaseUID:user?.uid,
 ...form
 })
-
 })
 
 const data = await res.json()
@@ -44,26 +40,63 @@ return
 }
 
 alert("Application sent to admin")
-
 window.location.href="/"
 
 }
 
 return(
 
-<div style={{padding:"40px"}}>
+<div className="min-h-screen flex items-center justify-center p-6">
 
-<h1>Supplier Application</h1>
+<div className="bg-card p-10 rounded-2xl w-[500px] space-y-5">
 
-<input name="name" placeholder="Name" onChange={handleChange}/>
-<input name="phone" placeholder="Phone" onChange={handleChange}/>
-<input name="rollNo" placeholder="Roll No" onChange={handleChange}/>
-<input name="branch" placeholder="Branch" onChange={handleChange}/>
-<input name="year" placeholder="Year" onChange={handleChange}/>
+<h1 className="text-3xl font-bold text-center">
+Supplier Application
+</h1>
 
-<button onClick={submit}>
+<input
+name="name"
+placeholder="Full Name"
+className="input w-full"
+onChange={handleChange}
+/>
+
+<input
+name="phone"
+placeholder="Phone Number"
+className="input w-full"
+onChange={handleChange}
+/>
+
+<input
+name="rollNo"
+placeholder="Roll Number"
+className="input w-full"
+onChange={handleChange}
+/>
+
+<input
+name="branch"
+placeholder="Branch"
+className="input w-full"
+onChange={handleChange}
+/>
+
+<input
+name="year"
+placeholder="Year"
+className="input w-full"
+onChange={handleChange}
+/>
+
+<button
+onClick={submit}
+className="w-full py-3 bg-primary rounded-xl hover:scale-105"
+>
 Submit Application
 </button>
+
+</div>
 
 </div>
 

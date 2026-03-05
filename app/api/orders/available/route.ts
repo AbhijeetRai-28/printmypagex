@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
-import User from "@/models/User"
+import Supplier from "@/models/Supplier"
 
 export async function GET(req: Request) {
 
@@ -18,31 +18,43 @@ export async function GET(req: Request) {
     )
   }
 
-  // 🔐 Verify supplier exists
-  const supplier = await User.findOne({ firebaseUID: supplierUID })
+  /* verify supplier exists */
+
+  const supplier = await Supplier.findOne({
+    firebaseUID: supplierUID
+  })
 
   if (!supplier) {
     return NextResponse.json(
-      { error: "Supplier not found" },
+      { error: "Supplier not registered" },
       { status: 403 }
     )
   }
 
-  // 🔐 Ensure correct role
-  if (supplier.role !== "SUPPLIER") {
+  if (!supplier.approved) {
     return NextResponse.json(
-      { error: "Access denied" },
+      { error: "Supplier not approved" },
       { status: 403 }
     )
   }
+
+  if (!supplier.active) {
+    return NextResponse.json(
+      { error: "Supplier inactive" },
+      { status: 403 }
+    )
+  }
+
+  /* fetch available orders */
 
   const orders = await Order.find({
 
     status: "pending",
 
     $or: [
-      { requestType: "global" },
-      { supplierUID: supplierUID }
+      { requestType: "global" },      // global orders
+      { supplierUID: supplierUID },   // assigned to this supplier
+      { supplierUID: null }           // unassigned orders
     ]
 
   }).sort({ createdAt: -1 })

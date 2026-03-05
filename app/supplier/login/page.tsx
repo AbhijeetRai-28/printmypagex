@@ -33,13 +33,26 @@ window.location.href="/supplier/dashboard"
 
 return(
 
-<div style={{padding:"40px"}}>
+<div className="min-h-screen flex items-center justify-center">
 
-<h1>Supplier Login</h1>
+<div className="bg-card p-10 rounded-2xl w-[400px] text-center space-y-6">
 
-<button onClick={login}>
+<h1 className="text-3xl font-bold">
+Supplier Login
+</h1>
+
+<p className="text-white/70">
+Login to access supplier dashboard
+</p>
+
+<button
+onClick={login}
+className="w-full py-3 bg-primary rounded-xl hover:scale-105"
+>
 Login with Google
 </button>
+
+</div>
 
 </div>
 

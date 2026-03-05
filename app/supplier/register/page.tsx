@@ -5,45 +5,57 @@ import { signInWithPopup } from "firebase/auth"
 
 export default function SupplierRegister(){
 
-  const register = async () => {
+const register = async()=>{
 
-    try{
+try{
 
-      const result = await signInWithPopup(auth, provider)
+const result = await signInWithPopup(auth,provider)
 
-      const user = result.user
+const user = result.user
 
-      const res = await fetch(
-        `/api/supplier/me?firebaseUID=${user.uid}`
-      )
+const res = await fetch(
+`/api/supplier/me?firebaseUID=${user.uid}`
+)
 
-      const data = await res.json()
+const data = await res.json()
 
-      if(data.supplier){
-        window.location.href="/supplier/login"
-      }else{
-        window.location.href="/supplier/apply"
-      }
+if(data.supplier){
+window.location.href="/supplier/login"
+}else{
+window.location.href="/supplier/apply"
+}
 
-    }catch(err){
-      console.log(err)
-      alert("Registration failed")
-    }
+}catch(err){
+alert("Registration failed")
+}
 
-  }
+}
 
-  return(
+return(
 
-    <div style={{padding:"40px"}}>
+<div className="min-h-screen flex items-center justify-center">
 
-      <h1>Supplier Registration</h1>
+<div className="bg-card p-10 rounded-2xl w-[400px] text-center space-y-6">
 
-      <button onClick={register}>
-        Register with Google
-      </button>
+<h1 className="text-3xl font-bold">
+Supplier Registration
+</h1>
 
-    </div>
+<p className="text-white/70">
+Sign in with Google to register as supplier.
+</p>
 
-  )
+<button
+onClick={register}
+className="w-full py-3 bg-primary rounded-xl hover:scale-105"
+>
+Register with Google
+</button>
+
+</div>
+
+</div>
+
+)
 
 }
