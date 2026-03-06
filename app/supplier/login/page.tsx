@@ -1,9 +1,28 @@
 "use client"
 
 import { auth, provider } from "@/lib/firebase"
-import { signInWithPopup } from "firebase/auth"
+import { signInWithPopup, onAuthStateChanged } from "firebase/auth"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function SupplierLogin(){
+
+const router = useRouter()
+
+useEffect(()=>{
+
+const unsub = onAuthStateChanged(auth,(user)=>{
+
+if(user){
+router.push("/supplier/dashboard")
+}
+
+})
+
+return ()=>unsub()
+
+},[router])
+
 
 const login = async()=>{
 

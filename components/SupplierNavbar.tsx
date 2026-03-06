@@ -3,12 +3,15 @@
 import Link from "next/link"
 import { signOut } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { useRouter } from "next/navigation"
 
 export default function SupplierNavbar(){
 
+const router = useRouter()
+
 const logout = async()=>{
  await signOut(auth)
- window.location.href="/"
+ router.push("/")
 }
 
 return(
@@ -23,18 +26,20 @@ PrintMyPage
 
 <div className="flex gap-6 items-center">
 
-<Link
-href="/supplier"
-className="text-white/80 hover:text-white"
->
-Home
+<Link href="/supplier/dashboard">
+Dashboard
 </Link>
 
-<Link
-href="/supplier/dashboard"
-className="text-white/80 hover:text-white"
->
-Dashboard
+<Link href="/supplier/orders">
+Orders
+</Link>
+
+<Link href="/supplier/accepted">
+Accepted
+</Link>
+
+<Link href="/supplier/profile">
+Profile
 </Link>
 
 <button

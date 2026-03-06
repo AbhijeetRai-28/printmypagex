@@ -18,6 +18,21 @@ const OrderSchema = new mongoose.Schema({
     default:"global"
   },
 
+  alternatePhone:{
+    type:String,
+    default:""
+  },
+
+  duplex:{
+    type:Boolean,
+    default:false
+  },
+
+  instruction:{
+    type:String,
+    default:""
+  },
+
   fileURL:{
     type:String,
     required:true

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect,useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
 import { useRouter } from "next/navigation"
@@ -16,10 +16,26 @@ const router = useRouter()
 
 useEffect(()=>{
 
-const unsub = onAuthStateChanged(auth,(user)=>{
+const unsub = onAuthStateChanged(auth,async(user)=>{
 
 if(!user){
 router.push("/supplier/login")
+return
+}
+
+const res = await fetch(
+`/api/supplier/me?firebaseUID=${user.uid}`
+)
+
+const data = await res.json()
+
+if(!data.supplier){
+router.push("/supplier/register")
+return
+}
+
+if(!data.supplier.approved){
+router.push("/supplier")
 return
 }
 
@@ -33,9 +49,15 @@ return ()=>unsub()
 
 if(loading){
 return(
+
 <div className="flex items-center justify-center min-h-screen">
-<p className="text-gray-400">Loading dashboard...</p>
+
+<p className="text-gray-400">
+Loading dashboard...
+</p>
+
 </div>
+
 )
 }
 

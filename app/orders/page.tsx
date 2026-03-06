@@ -1,53 +1,70 @@
 "use client"
 
+import SupplierGuard from "@/components/SupplierGuard"
 import { useEffect,useState } from "react"
 import { auth } from "@/lib/firebase"
 
-export default function OrdersPage(){
+export default function SupplierOrders(){
 
-  const [orders,setOrders] = useState<any[]>([])
+const [orders,setOrders] = useState<any[]>([])
 
-  useEffect(()=>{
+useEffect(()=>{
 
-    const loadOrders = async()=>{
+const load = async()=>{
 
-      const user = auth.currentUser
+const user = auth.currentUser
+if(!user) return
 
-      if(!user) return
+const res = await fetch(`/api/orders/available?supplierUID=${user.uid}`)
+const data = await res.json()
 
-      const res = await fetch(`/api/order?firebaseUID=${user.uid}`)
+setOrders(data.orders || [])
 
-      const data = await res.json()
+}
 
-      setOrders(data.orders)
+load()
 
-    }
+},[])
 
-    loadOrders()
+return(
 
-  },[])
+<SupplierGuard>
 
-  return(
+<div className="max-w-5xl mx-auto p-10">
 
-    <div className="orders-container">
+<h1 className="text-3xl mb-10">
+All Orders
+</h1>
 
-      <h1>My Orders</h1>
+{orders.map(order=>(
 
-      {orders.map((order)=>(
-        <div key={order._id} className="order-card">
+<div
+key={order._id}
+className="bg-card p-6 rounded-xl mb-4"
+>
 
-          <p><b>Pages:</b> {order.pages}</p>
+<p>Pages: {order.pages}</p>
 
-          <p><b>Price:</b> ₹{order.price}</p>
+<p>Print Type: {order.printType}</p>
 
-          <p><b>Status:</b> {order.status}</p>
+<p>Price: ₹{order.estimatedPrice}</p>
 
-          <p><b>Date:</b> {new Date(order.createdAt).toLocaleString()}</p>
+<a
+href={order.fileURL}
+target="_blank"
+className="text-indigo-400"
+>
+Preview File
+</a>
 
-        </div>
-      ))}
+</div>
 
-    </div>
+))}
 
-  )
+</div>
+
+</SupplierGuard>
+
+)
+
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
+import User from "@/models/User"
 
 export async function GET(req: Request) {
 
@@ -52,16 +53,39 @@ export async function GET(req: Request) {
     status: "pending",
 
     $or: [
-      { requestType: "global" },      // global orders
-      { supplierUID: supplierUID },   // assigned to this supplier
-      { supplierUID: null }           // unassigned orders
+      { requestType: "global" },
+      { supplierUID: supplierUID },
+      { supplierUID: null }
     ]
 
   }).sort({ createdAt: -1 })
 
+  /* attach user details to each order */
+
+  const enrichedOrders = await Promise.all(
+
+    orders.map(async (order) => {
+
+      const user = await User.findOne({
+        firebaseUID: order.userUID
+      })
+
+      return {
+        ...order.toObject(),
+
+        userName: user?.name || "",
+        class: user?.section || "",
+        rollNo: user?.rollNo || "",
+        phone: user?.phone || ""
+      }
+
+    })
+
+  )
+
   return NextResponse.json({
     success: true,
-    orders
+    orders: enrichedOrders
   })
 
 }
