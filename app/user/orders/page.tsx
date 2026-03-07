@@ -8,11 +8,18 @@ import { pusherClient } from "@/lib/pusher-client"
 import toast from "react-hot-toast"
 import { onAuthStateChanged } from "firebase/auth"
 
+declare global {
+interface Window {
+Razorpay: any
+}
+}
+
 export default function UserOrders() {
 
 const [orders,setOrders] = useState<any[]>([])
 const [loading,setLoading] = useState(true)
 const [selectedOrder,setSelectedOrder] = useState<any>(null)
+const [paying,setPaying] = useState(false)
 
 useEffect(()=>{
 
@@ -126,6 +133,139 @@ setSelectedOrder(null)
 
 }
 
+const loadRazorpayScript = async()=>{
+if(window.Razorpay) return true
+
+return new Promise<boolean>((resolve)=>{
+const script = document.createElement("script")
+script.src = "https://checkout.razorpay.com/v1/checkout.js"
+script.onload = ()=>resolve(true)
+script.onerror = ()=>resolve(false)
+document.body.appendChild(script)
+})
+}
+
+const payNow = async(order:any)=>{
+
+const user = auth.currentUser
+if(!user){
+toast.error("Please login again")
+return
+}
+
+if(paying) return
+setPaying(true)
+
+try{
+
+const isLoaded = await loadRazorpayScript()
+if(!isLoaded){
+toast.error("Failed to load payment gateway")
+setPaying(false)
+return
+}
+
+const createRes = await fetch("/api/payment/create",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+orderId:order._id,
+userUID:user.uid
+})
+})
+
+const createData = await createRes.json()
+
+if(!createRes.ok || !createData.success){
+toast.error(createData.message || "Payment initialization failed")
+setPaying(false)
+return
+}
+
+const razorpay = new window.Razorpay({
+key:createData.key,
+amount:createData.amount,
+currency:createData.currency,
+name:"PrintMyPage",
+description:`Payment for Order ${order._id}`,
+order_id:createData.razorpayOrderId,
+handler: async(response:any)=>{
+
+const verifyRes = await fetch("/api/payment/verify",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+orderId:order._id,
+userUID:user.uid,
+razorpay_order_id:response.razorpay_order_id,
+razorpay_payment_id:response.razorpay_payment_id,
+razorpay_signature:response.razorpay_signature
+})
+})
+
+const verifyData = await verifyRes.json()
+
+if(!verifyRes.ok || !verifyData.success){
+toast.error(verifyData.message || "Payment verification failed")
+setPaying(false)
+return
+}
+
+toast.success("Payment successful")
+
+setOrders(prev =>
+prev.map((o:any)=>
+o._id===order._id ? verifyData.order : o
+)
+)
+
+setSelectedOrder((prev:any)=>
+prev && prev._id===order._id ? verifyData.order : prev
+)
+
+setPaying(false)
+
+},
+prefill:{
+name:user.displayName || "",
+email:user.email || ""
+},
+theme:{
+color:"#4f46e5"
+},
+modal:{
+ondismiss: ()=>{
+setPaying(false)
+}
+}
+})
+
+razorpay.open()
+
+}catch{
+toast.error("Payment failed")
+setPaying(false)
+}
+
+}
+
+const downloadReceipt = (orderId:string)=>{
+const user = auth.currentUser
+if(!user){
+toast.error("Please login again")
+return
+}
+
+window.open(
+`/api/payment/receipt?orderId=${orderId}&userUID=${user.uid}`,
+"_blank"
+)
+}
+
 
 
 const totalOrders = orders.length
@@ -232,6 +372,16 @@ className="mt-6 text-indigo-400 hover:text-indigo-300 text-sm font-medium"
 >
 View Details →
 </button>
+
+{order.status==="awaiting_payment" && order.paymentStatus==="unpaid" &&(
+<button
+onClick={()=>payNow(order)}
+disabled={paying}
+className="mt-4 w-full bg-green-500 px-4 py-2 rounded-xl font-semibold disabled:opacity-60"
+>
+{paying ? "Processing..." : `Pay Now ₹${order.finalPrice ?? order.estimatedPrice}`}
+</button>
+)}
 
 
 </div>
@@ -341,6 +491,12 @@ done:selectedOrder.paymentStatus==="paid"
 },
 
 {
+title:"Awaiting Payment",
+time:selectedOrder.status==="awaiting_payment",
+done:["awaiting_payment","printing","printed","delivered"].includes(selectedOrder.status)
+},
+
+{
 title:"Printed",
 time:selectedOrder.status==="printed",
 done:["printed","delivered"].includes(selectedOrder.status)
@@ -411,6 +567,26 @@ className="bg-red-500 px-6 py-2 rounded-xl font-semibold"
 Cancel Order
 </button>
 
+)}
+
+{selectedOrder.paymentStatus==="unpaid" &&
+selectedOrder.status==="awaiting_payment" &&(
+<button
+onClick={()=>payNow(selectedOrder)}
+disabled={paying}
+className="bg-green-500 px-6 py-2 rounded-xl font-semibold disabled:opacity-60"
+>
+{paying ? "Processing..." : `Pay Now ₹${selectedOrder.finalPrice ?? selectedOrder.estimatedPrice}`}
+</button>
+)}
+
+{selectedOrder.paymentStatus==="paid" &&(
+<button
+onClick={()=>downloadReceipt(selectedOrder._id)}
+className="bg-indigo-500 px-6 py-2 rounded-xl font-semibold"
+>
+Download Receipt (.doc)
+</button>
 )}
 
 <button

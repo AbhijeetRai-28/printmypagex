@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
 import toast from "react-hot-toast"
+import { pusherClient } from "@/lib/pusher-client"
 
 export default function SupplierOrders(){
 
@@ -29,6 +30,38 @@ loadOrders(user.uid)
 return ()=>unsubscribe()
 
 },[])
+
+useEffect(()=>{
+
+if(!uid) return
+
+const channel = pusherClient.subscribe(`supplier-${uid}`)
+
+channel.bind("order-updated",(updatedOrder:any)=>{
+
+setOrders(prev =>
+prev.map(order =>
+order._id===updatedOrder._id ? updatedOrder : order
+)
+)
+
+setAvailable(prev =>
+prev.map(order =>
+order._id===updatedOrder._id ? updatedOrder : order
+)
+)
+
+setSelectedOrder((prev:any)=>
+prev && prev._id===updatedOrder._id ? updatedOrder : prev
+)
+
+})
+
+return ()=>{
+pusherClient.unsubscribe(`supplier-${uid}`)
+}
+
+},[uid])
 
 
 const loadOrders = async(uid:string)=>{
@@ -122,6 +155,44 @@ toast.error("Failed to cancel order")
 }
 
 
+const updateOrderStatus = async(orderId:string,status:"printing"|"printed"|"delivered")=>{
+
+if(!uid) return
+
+try{
+
+const res = await fetch("/api/orders/update-status",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+orderId,
+status,
+supplierUID:uid
+})
+})
+
+const data = await res.json()
+
+if(!res.ok || !data.success){
+toast.error(data.message || "Failed to update status")
+return
+}
+
+toast.success(`Order marked as ${status}`)
+await loadOrders(uid)
+
+if(selectedOrder && selectedOrder._id===orderId){
+setSelectedOrder(data.order)
+}
+
+}catch{
+toast.error("Failed to update status")
+}
+
+}
+
 /* NEW: VERIFY PAGES */
 
 const verifyPages = async(orderId:string)=>{
@@ -200,6 +271,7 @@ let displayOrders:any[]=[]
 if(filter==="pending") displayOrders=available
 if(filter==="accepted") displayOrders=orders.filter(o=>o.status==="accepted")
 if(filter==="awaiting_payment") displayOrders=orders.filter(o=>o.status==="awaiting_payment")
+if(filter==="printing") displayOrders=orders.filter(o=>o.status==="printing")
 if(filter==="paid") displayOrders=orders.filter(o=>o.paymentStatus==="paid")
 if(filter==="printed") displayOrders=orders.filter(o=>o.status==="printed")
 if(filter==="delivered") displayOrders=orders.filter(o=>o.status==="delivered")
@@ -228,6 +300,7 @@ Supplier Orders
 ["pending","Pending"],
 ["accepted","Accepted"],
 ["awaiting_payment","Awaiting Payment"],
+["printing","Printing"],
 ["paid","Paid"],
 ["printed","Printed"],
 ["delivered","Delivered"],
@@ -353,6 +426,33 @@ Accept
 
 )}
 
+{order.status==="awaiting_payment" && order.paymentStatus==="paid" &&(
+<button
+onClick={()=>updateOrderStatus(order._id,"printing")}
+className="bg-indigo-500 px-6 py-2 rounded-xl font-semibold"
+>
+Start Printing
+</button>
+)}
+
+{order.status==="printing" &&(
+<button
+onClick={()=>updateOrderStatus(order._id,"printed")}
+className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
+>
+Mark Printed
+</button>
+)}
+
+{order.status==="printed" &&(
+<button
+onClick={()=>updateOrderStatus(order._id,"delivered")}
+className="bg-purple-500 px-6 py-2 rounded-xl font-semibold"
+>
+Mark Delivered
+</button>
+)}
+
 {order.paymentStatus==="unpaid" && order.status!=="cancelled" &&(
 
 <button
@@ -467,8 +567,9 @@ Order Timeline
 {[
 {title:"Order Placed",done:true},
 {title:"Accepted",done:selectedOrder.status!=="pending"},
-{title:"Awaiting Payment",done:selectedOrder.status==="awaiting_payment"},
-{title:"Printed",done:selectedOrder.status==="printed"},
+{title:"Awaiting Payment",done:["awaiting_payment","printing","printed","delivered"].includes(selectedOrder.status)},
+{title:"Printing",done:["printing","printed","delivered"].includes(selectedOrder.status)},
+{title:"Printed",done:["printed","delivered"].includes(selectedOrder.status)},
 {title:"Delivered",done:selectedOrder.status==="delivered"}
 ].map((step,i)=>{
 
@@ -511,6 +612,33 @@ className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
 >
 Verify Pages
 </button>
+
+{selectedOrder.status==="awaiting_payment" && selectedOrder.paymentStatus==="paid" &&(
+<button
+onClick={()=>updateOrderStatus(selectedOrder._id,"printing")}
+className="bg-indigo-500 px-6 py-2 rounded-xl font-semibold"
+>
+Start Printing
+</button>
+)}
+
+{selectedOrder.status==="printing" &&(
+<button
+onClick={()=>updateOrderStatus(selectedOrder._id,"printed")}
+className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
+>
+Mark Printed
+</button>
+)}
+
+{selectedOrder.status==="printed" &&(
+<button
+onClick={()=>updateOrderStatus(selectedOrder._id,"delivered")}
+className="bg-purple-500 px-6 py-2 rounded-xl font-semibold"
+>
+Mark Delivered
+</button>
+)}
 
 <button
 onClick={()=>setSelectedOrder(null)}
