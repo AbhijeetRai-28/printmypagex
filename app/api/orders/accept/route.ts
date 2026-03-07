@@ -15,11 +15,21 @@ export async function POST(req: Request) {
     {
       _id: orderId,
       status: "pending",
-      supplierUID: null
+      $or: [
+        { supplierUID: null },
+        { supplierUID: supplierUID }
+      ]
     },
     {
       supplierUID: supplierUID,
-      status: "accepted"
+      status: "accepted",
+      acceptedAt: new Date(),
+      $push: {
+        logs: {
+          message: "Order accepted by supplier",
+          time: new Date()
+        }
+      }
     },
     { new: true }
   )
@@ -31,7 +41,6 @@ export async function POST(req: Request) {
     })
   }
 
-  // 🔥 BROADCAST REMOVAL
   await pusherServer.trigger("orders", "order-accepted", {
     orderId
   })

@@ -84,6 +84,31 @@ const OrderSchema = new mongoose.Schema({
     default:"pending"
   },
 
+  acceptedAt:{
+    type:Date,
+    default:null
+  },
+
+  deliveredAt:{
+    type:Date,
+    default:null
+  },
+
+  cancelledAt:{
+    type:Date,
+    default:null
+  },
+
+  logs:[
+    {
+      message:String,
+      time:{
+        type:Date,
+        default:Date.now
+      }
+    }
+  ],
+
   createdAt:{
     type:Date,
     default:Date.now

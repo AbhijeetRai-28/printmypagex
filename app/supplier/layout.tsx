@@ -3,9 +3,9 @@
 import SupplierNavbar from "@/components/SupplierNavbar"
 
 export default function SupplierLayout({
- children
+  children
 }:{
- children:React.ReactNode
+  children:React.ReactNode
 }){
 
 return(
@@ -14,7 +14,9 @@ return(
 
 <SupplierNavbar/>
 
-<div className="max-w-6xl mx-auto p-8">
+{/* wider container */}
+
+<div className="max-w-[1500px] mx-auto px-8 py-10">
 {children}
 </div>
 

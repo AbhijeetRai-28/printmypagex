@@ -9,7 +9,6 @@ export async function GET(req: Request) {
   await connectDB()
 
   const { searchParams } = new URL(req.url)
-
   const supplierUID = searchParams.get("supplierUID")
 
   if (!supplierUID) {
@@ -19,48 +18,41 @@ export async function GET(req: Request) {
     )
   }
 
-  /* verify supplier exists */
-
   const supplier = await Supplier.findOne({
     firebaseUID: supplierUID
   })
 
   if (!supplier) {
-    return NextResponse.json(
-      { error: "Supplier not registered" },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "Supplier not registered" }, { status: 403 })
   }
 
   if (!supplier.approved) {
-    return NextResponse.json(
-      { error: "Supplier not approved" },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "Supplier not approved" }, { status: 403 })
   }
 
   if (!supplier.active) {
-    return NextResponse.json(
-      { error: "Supplier inactive" },
-      { status: 403 }
-    )
+    return NextResponse.json({ error: "Supplier inactive" }, { status: 403 })
   }
-
-  /* fetch available orders */
 
   const orders = await Order.find({
 
     status: "pending",
 
     $or: [
-      { requestType: "global" },
-      { supplierUID: supplierUID },
-      { supplierUID: null }
+
+      {
+        requestType: "global",
+        supplierUID: null
+      },
+
+      {
+        requestType: "specific",
+        supplierUID: supplierUID
+      }
+
     ]
 
   }).sort({ createdAt: -1 })
-
-  /* attach user details to each order */
 
   const enrichedOrders = await Promise.all(
 
@@ -72,7 +64,6 @@ export async function GET(req: Request) {
 
       return {
         ...order.toObject(),
-
         userName: user?.name || "",
         class: user?.section || "",
         rollNo: user?.rollNo || "",
