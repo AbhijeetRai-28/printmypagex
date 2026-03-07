@@ -44,8 +44,6 @@ return ()=>unsubscribe()
 
 },[])
 
-
-
 useEffect(()=>{
 
 const user = auth.currentUser
@@ -59,6 +57,10 @@ setOrders(prev =>
 prev.map(order =>
 order._id===updatedOrder._id ? updatedOrder : order
 )
+)
+
+setSelectedOrder(prev =>
+prev && prev._id===updatedOrder._id ? updatedOrder : prev
 )
 
 toast.success("Order status updated")
@@ -80,6 +82,9 @@ return "bg-yellow-500/20 text-yellow-400 border border-yellow-400/30"
 
 if(status==="accepted")
 return "bg-blue-500/20 text-blue-400 border border-blue-400/30"
+
+if(status==="awaiting_payment")
+return "bg-orange-500/20 text-orange-400 border border-orange-400/30"
 
 if(status==="printing")
 return "bg-purple-500/20 text-purple-400 border border-purple-400/30"
@@ -190,14 +195,14 @@ className={`px-4 py-1 text-xs rounded-full font-semibold tracking-wide ${getStat
 <div className="flex justify-between">
 <span>Pages</span>
 <span className="font-semibold text-white">
-{order.pages}
+{order.verifiedPages || order.pages}
 </span>
 </div>
 
 <div className="flex justify-between">
-<span>Estimated</span>
+<span>Amount</span>
 <span className="font-semibold text-white">
-₹{order.estimatedPrice}
+₹{order.finalPrice ?? order.estimatedPrice}
 </span>
 </div>
 
@@ -256,11 +261,13 @@ View Details →
 Order Details
 </h2>
 
-<p>Pages: {selectedOrder.pages}</p>
+<p>Pages: {selectedOrder.verifiedPages || selectedOrder.pages}</p>
 <p>Print Type: {selectedOrder.printType}</p>
 <p>Estimated Price: ₹{selectedOrder.estimatedPrice}</p>
 
 <p>Final Price: ₹{selectedOrder.finalPrice || "Not calculated"}</p>
+
+<p>Amount Payable: ₹{selectedOrder.finalPrice ?? selectedOrder.estimatedPrice}</p>
 
 <p>Duplex: {selectedOrder.duplex ? "Yes":"No"}</p>
 

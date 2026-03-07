@@ -13,6 +13,7 @@ const [loading,setLoading] = useState(true)
 const [selectedOrder,setSelectedOrder] = useState<any>(null)
 const [uid,setUid] = useState<string | null>(null)
 const [filter,setFilter] = useState("pending")
+const [verifiedPages,setVerifiedPages] = useState<number>(0)
 
 useEffect(()=>{
 
@@ -108,6 +109,54 @@ toast.error("Failed to cancel order")
 }
 
 
+/* NEW: VERIFY PAGES */
+
+const verifyPages = async(orderId:string)=>{
+
+if(!uid){
+toast.error("Supplier not authenticated")
+return
+}
+
+if(!Number.isFinite(verifiedPages) || verifiedPages<=0){
+toast.error("Enter verified pages")
+return
+}
+
+try{
+
+const res = await fetch("/api/orders/verify",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+orderId,
+supplierUID:uid,
+verifiedPages
+})
+})
+
+const data = await res.json()
+
+if(!res.ok || !data.success){
+toast.error(data.message || "Failed to verify pages")
+return
+}
+
+toast.success("Pages verified")
+
+await loadOrders(uid)
+
+setSelectedOrder(null)
+
+}catch{
+toast.error("Failed to verify pages")
+}
+
+}
+
+
 const getStatusColor = (status:string)=>{
 
 if(status==="pending")
@@ -115,6 +164,9 @@ return "bg-yellow-500/20 text-yellow-400 border border-yellow-400/30"
 
 if(status==="accepted")
 return "bg-blue-500/20 text-blue-400 border border-blue-400/30"
+
+if(status==="awaiting_payment")
+return "bg-orange-500/20 text-orange-400 border border-orange-400/30"
 
 if(status==="printing")
 return "bg-indigo-500/20 text-indigo-400 border border-indigo-400/30"
@@ -134,6 +186,7 @@ let displayOrders:any[]=[]
 
 if(filter==="pending") displayOrders=available
 if(filter==="accepted") displayOrders=orders.filter(o=>o.status==="accepted")
+if(filter==="awaiting_payment") displayOrders=orders.filter(o=>o.status==="awaiting_payment")
 if(filter==="paid") displayOrders=orders.filter(o=>o.paymentStatus==="paid")
 if(filter==="printed") displayOrders=orders.filter(o=>o.status==="printed")
 if(filter==="delivered") displayOrders=orders.filter(o=>o.status==="delivered")
@@ -161,6 +214,7 @@ Supplier Orders
 {[
 ["pending","Pending"],
 ["accepted","Accepted"],
+["awaiting_payment","Awaiting Payment"],
 ["paid","Paid"],
 ["printed","Printed"],
 ["delivered","Delivered"],
@@ -230,14 +284,14 @@ className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getSt
 <div className="flex justify-between">
 <span>Pages</span>
 <span className="font-semibold text-white">
-{order.pages}
+{order.verifiedPages || order.pages}
 </span>
 </div>
 
 <div className="flex justify-between">
-<span>Estimated</span>
+<span>Amount</span>
 <span className="font-semibold text-white">
-₹{order.estimatedPrice}
+₹{order.finalPrice ?? order.estimatedPrice}
 </span>
 </div>
 
@@ -264,7 +318,10 @@ className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getSt
 <div className="flex items-center gap-6 mt-6">
 
 <button
-onClick={()=>setSelectedOrder(order)}
+onClick={()=>{
+setSelectedOrder(order)
+setVerifiedPages(order.verifiedPages || order.pages)
+}}
 className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
 >
 View Details →
@@ -305,6 +362,8 @@ Cancel
 </div>
 
 
+{/* MODAL */}
+
 {selectedOrder &&(
 
 <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50">
@@ -325,8 +384,42 @@ Order Details
 <p>Class: {selectedOrder.class}</p>
 <p>Roll No: {selectedOrder.rollNo}</p>
 
-<p>Pages: {selectedOrder.pages}</p>
+<p>
+Pages:
+<input
+type="number"
+value={verifiedPages}
+onChange={(e)=>setVerifiedPages(Number(e.target.value))}
+className="ml-3 bg-black border border-white/20 px-2 py-1 w-20 rounded"
+/>
+</p>
+
 <p>Print Type: {selectedOrder.printType}</p>
+
+<p>
+Estimated Price: ₹{selectedOrder.estimatedPrice}
+</p>
+
+<p>
+Updated Final Price (Preview): ₹{verifiedPages > 0
+? (selectedOrder.printType === "color"
+? verifiedPages * 5
+: selectedOrder.printType === "glossy"
+? verifiedPages * 15
+: verifiedPages * 2)
+: "Enter pages"}
+</p>
+
+<p>
+Final Price: ₹{selectedOrder.finalPrice ?? "Not calculated"}
+</p>
+
+{selectedOrder.finalPrice && (
+<p>
+Final Price: ₹{selectedOrder.finalPrice}
+</p>
+)}
+
 <p>Status: {selectedOrder.status}</p>
 <p>Payment: {selectedOrder.paymentStatus}</p>
 
@@ -361,7 +454,7 @@ Order Timeline
 {[
 {title:"Order Placed",done:true},
 {title:"Accepted",done:selectedOrder.status!=="pending"},
-{title:"Paid",done:selectedOrder.paymentStatus==="paid"},
+{title:"Awaiting Payment",done:selectedOrder.status==="awaiting_payment"},
 {title:"Printed",done:selectedOrder.status==="printed"},
 {title:"Delivered",done:selectedOrder.status==="delivered"}
 ].map((step,i)=>{
@@ -397,12 +490,23 @@ ${active
 </div>
 
 
+<div className="flex gap-4 mt-8">
+
+<button
+onClick={()=>verifyPages(selectedOrder._id)}
+className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
+>
+Verify Pages
+</button>
+
 <button
 onClick={()=>setSelectedOrder(null)}
-className="mt-8 bg-primary px-6 py-2 rounded-xl text-black font-semibold"
+className="bg-primary px-6 py-2 rounded-xl text-black font-semibold"
 >
 Close
 </button>
+
+</div>
 
 </div>
 
