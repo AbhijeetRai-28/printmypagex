@@ -65,30 +65,76 @@ export async function GET(req: Request) {
       : new Date().toLocaleString()
 
     const fileBody = `
-PrintMyPage Payment Receipt
-========================================
-Receipt Date: ${paidDate}
-Order ID: ${String(order._id)}
-Razorpay Order ID: ${order.razorpayOrderId || "N/A"}
-Razorpay Payment ID: ${order.razorpayPaymentId || "N/A"}
+PRINTMYPAGEPSIT – OFFICIAL PROOF THAT YOU PAID US
+=================================================================
 
-Customer Name: ${user?.name || "N/A"}
-Customer UID: ${order.userUID}
-Supplier: ${supplier?.name || "N/A"}
+Receipt Generated On : ${paidDate}
 
-Print Type: ${order.printType}
-Pages: ${order.verifiedPages || order.pages}
-Amount Paid: INR ${amount}
-Payment Status: ${order.paymentStatus.toUpperCase()}
+CUSTOMER DETAILS
+----------------------------------------------------------------------
+Name                 : ${user?.name || "Unknown Human"}
+User UID             : ${order.userUID}
+Assigned Supplier    : ${supplier?.name || "The Mysterious Printer Operator"}
 
-Thank you for using PrintMyPage.
+ORDER INFORMATION
+----------------------------------------------------------------------
+Order ID             : ${String(order._id)}
+Razorpay Order ID    : ${order.razorpayOrderId || "N/A"}
+Razorpay Payment ID  : ${order.razorpayPaymentId || "N/A"}
+
+
+PRINTING DETAILS
+----------------------------------------------------------------------
+Print Type           : ${order.printType}
+Total Pages          : ${order.verifiedPages || order.pages}
+Amount Paid          : INR ${amount}
+Payment Status       : ${order.paymentStatus.toUpperCase()}
+
+
+================================================================
+
+CONGRATULATIONS!
+Your payment has been successfully captured.
+
+Your document is currently being processed by a highly
+advanced paper-generation device (also known as a printer).
+
+Stand by while technology performs its ancient ritual.
+
+Somewhere, a printer has started warming up
+and preparing to scream like a jet engine.
+
+
+IMPORTANT ANNOUNCEMENT
+----------------------------------------------------------------------
+The following items were harmed during this process:
+
+- Several sheets of innocent paper
+- A small amount of printer ink
+- Possibly the printer's mental stability
+
+================================================================
+
+Thank you for trusting PrintMyPagePSIT
+to convert your panic into paper.
+
+Developed with caffeine, debugging tears,
+and questionable life decisions by
+
+Abhinav Sahu
+Developer of PrintMyPagePSIT
+Contact: 9793404007
+
+----------------------------------------------------------------------
+This is a computer-generated receipt.
+No signature required because printers sadly cannot hold pens.
 `.trim()
 
     return new Response(fileBody, {
       status: 200,
       headers: {
         "Content-Type": "application/msword; charset=utf-8",
-        "Content-Disposition": `attachment; filename=\"receipt-${String(order._id)}.doc\"`
+        "Content-Disposition": `attachment; filename="receipt-${String(order._id)}.doc"`
       }
     })
   } catch (error) {
