@@ -12,6 +12,8 @@ type SupplierOrderDetail = {
   status: string
   paymentStatus: string
   createdAt: string
+  pages?: number
+  verifiedPages?: number | null
   userName?: string
   phone?: string
   class?: string
