@@ -9,6 +9,7 @@ unique:true
 },
 
 name:String,
+email:String,
 phone:String,
 rollNo:String,
 branch:String,

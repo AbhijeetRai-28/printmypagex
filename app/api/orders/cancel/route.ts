@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
+import { sendOrderCancelledNotification } from "@/lib/order-email"
+
+export const runtime = "nodejs"
 
 export async function POST(req:Request){
 
@@ -30,6 +33,10 @@ time:new Date()
 })
 
 await order.save()
+
+sendOrderCancelledNotification(order, "user").catch((emailError) => {
+console.error("ORDER_CANCELLED_EMAIL_ERROR:", emailError)
+})
 
 return NextResponse.json({
 success:true

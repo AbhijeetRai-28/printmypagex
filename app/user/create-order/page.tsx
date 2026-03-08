@@ -50,10 +50,12 @@ export default function CreateOrderPage() {
     setSubmitting(true)
 
     const formData = new FormData()
+    const fallbackEmail = user.email || user.providerData?.[0]?.email || ""
 
     formData.append("file", file)
     formData.append("printType", printType)
     formData.append("firebaseUID", user.uid)
+    formData.append("userEmail", fallbackEmail)
     formData.append("requestType", requestType)
     formData.append("supplier", supplier)
 

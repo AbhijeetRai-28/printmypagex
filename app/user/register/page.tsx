@@ -12,6 +12,17 @@ export default function UserRegister() {
 
     const user = result.user
 
+    await fetch("/api/user/check-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        firebaseUID: user.uid,
+        email: user.email || user.providerData?.[0]?.email || ""
+      })
+    })
+
     const res = await fetch(`/api/user/details?firebaseUID=${user.uid}`)
     const data = await res.json()
 

@@ -37,6 +37,7 @@ headers:{
 },
 body:JSON.stringify({
 firebaseUID:user.uid,
+email:user.email || user.providerData?.[0]?.email || "",
 ...form
 })
 })

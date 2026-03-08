@@ -74,6 +74,17 @@ const unsubscribe = onAuthStateChanged(auth,(user)=>{
 
 if(!user) return
 
+fetch("/api/supplier/sync-email",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body: JSON.stringify({
+firebaseUID:user.uid,
+email:user.email || user.providerData?.[0]?.email || ""
+})
+}).catch(()=>{})
+
 loadOrders(user.uid)
 
 })

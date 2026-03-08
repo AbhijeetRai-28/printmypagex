@@ -6,6 +6,9 @@ import { pusherServer } from "@/lib/pusher-server"
 import { v2 as cloudinary } from "cloudinary"
 import type { UploadApiResponse } from "cloudinary"
 import pdf from "pdf-parse/lib/pdf-parse.js"
+import { sendOrderCreatedNotifications } from "@/lib/order-email"
+
+export const runtime = "nodejs"
 
 // Cloudinary config
 cloudinary.config({
@@ -25,6 +28,7 @@ export async function POST(req: Request) {
     const file = formData.get("file") as File
     const printType = formData.get("printType") as string
     const firebaseUID = formData.get("firebaseUID") as string
+    const userEmail = formData.get("userEmail") as string
     const requestType = formData.get("requestType") as string
     const supplier = formData.get("supplier") as string
 
@@ -65,11 +69,33 @@ export async function POST(req: Request) {
     // Verify user
     const user = await User.findOne({ firebaseUID })
 
+    console.log("USER_PROFILE_DEBUG: Upload payload identity", {
+      firebaseUID,
+      hasUserEmailInPayload: Boolean(userEmail),
+      hasUserEmailInDB: Boolean(user?.email),
+      hasUserNameInDB: Boolean(user?.name)
+    })
+
     if (!user) {
       return NextResponse.json(
         { error: "User not found" },
         { status: 403 }
       )
+    }
+
+    if (userEmail) {
+      await User.updateOne(
+        { firebaseUID },
+        {
+          $set: {
+            email: userEmail
+          }
+        }
+      )
+      console.log("USER_PROFILE_DEBUG: Synced user email in upload route", {
+        firebaseUID,
+        hasEmail: Boolean(userEmail)
+      })
     }
 
     // Convert file to buffer
@@ -169,6 +195,14 @@ export async function POST(req: Request) {
       "new-order",
       order
     )
+
+    sendOrderCreatedNotifications(order).catch((emailError) => {
+      console.error("ORDER_CREATED_EMAIL_ERROR:", emailError)
+    })
+    console.log("ORDER_EMAIL_DEBUG: Triggered create notifications", {
+      orderId: String(order._id),
+      requestType: order.requestType
+    })
 
     return NextResponse.json({
       success: true,

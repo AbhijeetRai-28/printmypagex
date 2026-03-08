@@ -24,8 +24,7 @@ export default function LoginPage() {
         },
         body: JSON.stringify({
           firebaseUID: user.uid,
-          email: user.email,
-          name: user.displayName
+          email: user.email || user.providerData?.[0]?.email || ""
         })
       })
 

@@ -3,6 +3,9 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
 import { pusherServer } from "@/lib/pusher-server"
+import { sendOrderAcceptedNotification } from "@/lib/order-email"
+
+export const runtime = "nodejs"
 
 export async function POST(req: Request) {
 
@@ -78,6 +81,14 @@ export async function POST(req: Request) {
 
   await pusherServer.trigger("orders", "order-accepted", {
     orderId
+  })
+
+  sendOrderAcceptedNotification(order).catch((emailError) => {
+    console.error("ORDER_ACCEPTED_EMAIL_ERROR:", emailError)
+  })
+  console.log("ORDER_EMAIL_DEBUG: Triggered accepted notification", {
+    orderId: String(order._id),
+    supplierUID
   })
 
   return NextResponse.json({

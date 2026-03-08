@@ -3,6 +3,9 @@ import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
+import { sendPaymentReceivedNotifications } from "@/lib/order-email"
+
+export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
@@ -94,6 +97,10 @@ export async function POST(req: Request) {
       } catch (pushError) {
         console.error("PUSHER SUPPLIER WEBHOOK UPDATE ERROR:", pushError)
       }
+
+      sendPaymentReceivedNotifications(order).catch((emailError) => {
+        console.error("PAYMENT_RECEIVED_EMAIL_ERROR:", emailError)
+      })
     }
 
     return NextResponse.json({ success: true, message: "Webhook processed" })

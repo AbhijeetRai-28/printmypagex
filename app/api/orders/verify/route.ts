@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
+import { sendAwaitingPaymentNotification } from "@/lib/order-email"
+
+export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
@@ -109,6 +112,10 @@ export async function POST(req: Request) {
     } catch (pushError) {
       console.error("PUSHER NOTIFICATION ERROR:", pushError)
     }
+
+    sendAwaitingPaymentNotification(order).catch((emailError) => {
+      console.error("AWAITING_PAYMENT_EMAIL_ERROR:", emailError)
+    })
 
     return NextResponse.json({
       success: true,

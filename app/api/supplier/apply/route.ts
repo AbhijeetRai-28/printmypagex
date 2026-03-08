@@ -16,6 +16,29 @@ firebaseUID: body.firebaseUID
 })
 
 if(existing){
+await User.findOneAndUpdate(
+{ firebaseUID: body.firebaseUID },
+{
+firebaseUID: body.firebaseUID,
+email: body.email || undefined,
+name: body.name,
+phone: body.phone,
+rollNo: body.rollNo,
+branch: body.branch,
+year: body.year,
+role: "SUPPLIER"
+},
+{
+upsert: true,
+new: true
+}
+)
+
+console.log("SUPPLIER_PROFILE_DEBUG: Existing supplier, user profile synced", {
+firebaseUID: body.firebaseUID,
+hasEmail: Boolean(body.email)
+})
+
 return NextResponse.json({
 error: "Already applied"
 })
@@ -25,6 +48,7 @@ const supplier = await Supplier.create({
 
 firebaseUID: body.firebaseUID,
 name: body.name,
+email: body.email || undefined,
 phone: body.phone,
 rollNo: body.rollNo,
 branch: body.branch,
@@ -42,6 +66,7 @@ await User.findOneAndUpdate(
 
 {
 firebaseUID: body.firebaseUID,
+email: body.email || undefined,
 name: body.name,
 phone: body.phone,
 rollNo: body.rollNo,
@@ -56,6 +81,11 @@ new: true
 }
 
 )
+
+console.log("SUPPLIER_PROFILE_DEBUG: Supplier application synced", {
+firebaseUID: body.firebaseUID,
+hasEmail: Boolean(body.email)
+})
 
 return NextResponse.json({
 success: true,

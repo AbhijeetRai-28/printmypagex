@@ -66,7 +66,7 @@ export async function GET(req: Request) {
 
     const fileBody = `
 PRINTMYPAGEPSIT – OFFICIAL PROOF THAT YOU PAID US
-=================================================================
+================================================================
 
 Receipt Generated On : ${paidDate}
 
@@ -82,7 +82,6 @@ Order ID             : ${String(order._id)}
 Razorpay Order ID    : ${order.razorpayOrderId || "N/A"}
 Razorpay Payment ID  : ${order.razorpayPaymentId || "N/A"}
 
-
 PRINTING DETAILS
 ----------------------------------------------------------------------
 Print Type           : ${order.printType}
@@ -90,20 +89,15 @@ Total Pages          : ${order.verifiedPages || order.pages}
 Amount Paid          : INR ${amount}
 Payment Status       : ${order.paymentStatus.toUpperCase()}
 
-
 ================================================================
 
 CONGRATULATIONS!
 Your payment has been successfully captured.
 
-Your document is currently being processed by a highly
-advanced paper-generation device (also known as a printer).
-
-Stand by while technology performs its ancient ritual.
-
 Somewhere, a printer has started warming up
 and preparing to scream like a jet engine.
 
+Stand by while our technology performs its ancient ritual.
 
 IMPORTANT ANNOUNCEMENT
 ----------------------------------------------------------------------
