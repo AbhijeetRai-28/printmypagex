@@ -1,83 +1,206 @@
 "use client"
 
+import { FormEvent, useState } from "react"
 import { auth, provider } from "@/lib/firebase"
-import { signInWithPopup } from "firebase/auth"
+import {
+  createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
+  sendEmailVerification,
+  signInWithPopup,
+  signOut
+} from "firebase/auth"
 
-export default function SupplierRegister(){
+export default function SupplierRegister() {
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [loading, setLoading] = useState<"email" | "google" | null>(null)
+  const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
 
-const register = async()=>{
+  const syncUserEmail = async (uid: string, userEmail: string) => {
+    await fetch("/api/user/check-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        firebaseUID: uid,
+        email: userEmail
+      })
+    })
 
-try{
+    await fetch("/api/supplier/sync-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        firebaseUID: uid,
+        email: userEmail
+      })
+    })
+  }
 
-const result = await signInWithPopup(auth,provider)
+  const routeAfterRegister = async (uid: string) => {
+    const res = await fetch(`/api/supplier/me?firebaseUID=${uid}`)
+    const data = await res.json()
 
-const user = result.user
+    if (data.supplier) {
+      window.location.href = "/supplier/login"
+      return
+    }
 
-await fetch("/api/user/check-user", {
-method: "POST",
-headers: {
-"Content-Type": "application/json"
-},
-body: JSON.stringify({
-firebaseUID: user.uid,
-email: user.email || user.providerData?.[0]?.email || ""
-})
-})
+    window.location.href = "/supplier/apply"
+  }
 
-await fetch("/api/supplier/sync-email", {
-method: "POST",
-headers: {
-"Content-Type": "application/json"
-},
-body: JSON.stringify({
-firebaseUID: user.uid,
-email: user.email || user.providerData?.[0]?.email || ""
-})
-})
+  const handleEmailRegister = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError("")
+    setSuccessMessage("")
 
-const res = await fetch(
-`/api/supplier/me?firebaseUID=${user.uid}`
-)
+    const normalizedEmail = email.trim()
 
-const data = await res.json()
+    if (!normalizedEmail || !password || !confirmPassword) {
+      setError("Email, password and confirm password are required")
+      return
+    }
 
-if(data.supplier){
-window.location.href="/supplier/login"
-}else{
-window.location.href="/supplier/apply"
-}
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
 
-}catch(err){
-alert("Registration failed")
-}
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
 
-}
+    setLoading("email")
 
-return(
+    try {
+      const result = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
+      const user = result.user
+      await sendEmailVerification(user)
+      await signOut(auth)
+      setSuccessMessage("Verification email sent. Please verify your email, then login.")
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code
 
-<div className="min-h-screen flex items-center justify-center">
+      if (code === "auth/email-already-in-use") {
+        try {
+          const signInMethods = await fetchSignInMethodsForEmail(auth, normalizedEmail)
+          if (signInMethods.includes("google.com")) {
+            setError("This email is already registered with Google. Please use Register with Google.")
+          } else {
+            setError("Email already in use. Please login instead.")
+          }
+        } catch {
+          setError("Email already in use. Please login instead.")
+        }
+      } else if (code === "auth/invalid-email") {
+        setError("Please enter a valid email")
+      } else if (code === "auth/weak-password") {
+        setError("Password is too weak. Use at least 6 characters.")
+      } else if (code === "auth/account-exists-with-different-credential") {
+        setError("This email is linked with Google login. Please use Register with Google.")
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many attempts. Try again in a few minutes.")
+      } else {
+        setError((err as Error)?.message || "Registration failed")
+      }
+    } finally {
+      setLoading(null)
+    }
+  }
 
-<div className="bg-card p-10 rounded-2xl w-[400px] text-center space-y-6">
+  const handleGoogleRegister = async () => {
+    setError("")
+    setSuccessMessage("")
+    setLoading("google")
 
-<h1 className="text-3xl font-bold">
-Supplier Registration
-</h1>
+    try {
+      const result = await signInWithPopup(auth, provider)
+      const user = result.user
+      await syncUserEmail(user.uid, user.email || user.providerData?.[0]?.email || "")
+      await routeAfterRegister(user.uid)
+    } catch (err: unknown) {
+      setError((err as Error)?.message || "Registration failed")
+    } finally {
+      setLoading(null)
+    }
+  }
 
-<p className="text-white/70">
-Sign in with Google to register as supplier.
-</p>
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="bg-card p-10 rounded-2xl w-full max-w-[420px] text-center">
+        <h1 className="text-3xl font-bold mb-2">Supplier Registration</h1>
+        <p className="text-white/70 mb-6">Register with Email or Google to continue</p>
 
-<button
-onClick={register}
-className="w-full py-3 bg-primary rounded-xl hover:scale-105"
->
-Register with Google
-</button>
+        <form onSubmit={handleEmailRegister} className="space-y-4 text-left">
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              className="input w-full"
+              placeholder="you@example.com"
+            />
+          </div>
 
-</div>
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              minLength={6}
+              className="input w-full"
+              placeholder="Create password"
+            />
+          </div>
 
-</div>
+          <div>
+            <label className="text-sm text-gray-400 mb-1 block">Confirm Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              minLength={6}
+              className="input w-full"
+              placeholder="Re-enter password"
+            />
+          </div>
 
-)
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          {successMessage && <p className="text-sm text-green-400">{successMessage}</p>}
 
+          <button
+            type="submit"
+            disabled={loading !== null}
+            className="w-full py-3 bg-primary rounded-xl hover:opacity-90 disabled:opacity-60"
+          >
+            {loading === "email" ? "Creating account..." : "Register with Email"}
+          </button>
+        </form>
+
+        <div className="my-5 text-gray-500">or</div>
+
+        <button
+          onClick={handleGoogleRegister}
+          disabled={loading !== null}
+          className="w-full py-3 bg-primary rounded-xl hover:opacity-90 disabled:opacity-60"
+        >
+          {loading === "google" ? "Please wait..." : "Register with Google"}
+        </button>
+      </div>
+    </div>
+  )
 }

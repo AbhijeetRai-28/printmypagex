@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import User from "@/models/User"
-import { isAlphabeticText, isNumeric, normalizeText } from "@/lib/form-validation"
+import {
+  isAlphabeticText,
+  isAlphanumericHyphenText,
+  isNumeric,
+  normalizeText
+} from "@/lib/form-validation"
 
 export async function POST(req: Request) {
 
@@ -48,9 +53,9 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!section || !isAlphabeticText(section)) {
+    if (!section || !isAlphanumericHyphenText(section)) {
       return NextResponse.json(
-        { success: false, message: "Section must contain only text" },
+        { success: false, message: "Section must contain only letters, numbers or '-'" },
         { status: 400 }
       )
     }

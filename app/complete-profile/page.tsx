@@ -133,8 +133,8 @@ export default function CompleteProfile() {
                 value={form.section}
                 onChange={handleChange}
                 required
-                pattern="[A-Za-z ]+"
-                title="Section should contain only text"
+                pattern="[A-Za-z0-9-]+"
+                title="Section should contain only letters, numbers or '-'"
                 className="input w-full focus:ring-2 focus:ring-indigo-500"
               />
             </div>
