@@ -4,6 +4,7 @@ import { useEffect,useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
 import { useRouter } from "next/navigation"
+import { isOwnerEmail } from "@/lib/owner-access"
 
 export default function SupplierGuard({
 children
@@ -21,6 +22,11 @@ const unsub = onAuthStateChanged(auth,async(user)=>{
 if(!user){
 setLoading(false)
 router.push("/supplier/login")
+return
+}
+
+if(isOwnerEmail(user.email)){
+setLoading(false)
 return
 }
 

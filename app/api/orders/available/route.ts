@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
 import User from "@/models/User"
+import { isOwnerEmail } from "@/lib/owner-access"
 
 export async function GET(req: Request) {
 
@@ -22,15 +23,18 @@ export async function GET(req: Request) {
     firebaseUID: supplierUID
   })
 
-  if (!supplier) {
+  const user = await User.findOne({ firebaseUID: supplierUID }).select("email")
+  const ownerAccess = isOwnerEmail(user?.email)
+
+  if (!supplier && !ownerAccess) {
     return NextResponse.json({ error: "Supplier not registered" }, { status: 403 })
   }
 
-  if (!supplier.approved) {
+  if (!ownerAccess && !supplier?.approved) {
     return NextResponse.json({ error: "Supplier not approved" }, { status: 403 })
   }
 
-  if (!supplier.active) {
+  if (!ownerAccess && !supplier?.active) {
     return NextResponse.json({ error: "Supplier inactive" }, { status: 403 })
   }
 
@@ -67,7 +71,19 @@ export async function GET(req: Request) {
         userName: user?.name || "",
         class: user?.section || "",
         rollNo: user?.rollNo || "",
-        phone: user?.phone || ""
+        phone: user?.phone || "",
+        userProfile: {
+          name: user?.name || "",
+          email: user?.email || "",
+          phone: user?.phone || "",
+          rollNo: user?.rollNo || "",
+          branch: user?.branch || "",
+          year: user?.year || "",
+          section: user?.section || "",
+          photoURL: user?.photoURL || "",
+          firebasePhotoURL: user?.firebasePhotoURL || "",
+          displayPhotoURL: (user?.photoURL || user?.firebasePhotoURL || "")
+        }
       }
 
     })

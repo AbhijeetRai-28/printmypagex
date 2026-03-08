@@ -12,6 +12,7 @@ export async function POST(req: Request) {
     const body = await req.json()
     const firebaseUID = body?.firebaseUID as string | undefined
     const email = body?.email as string | undefined
+    const photoURL = body?.photoURL as string | undefined
 
     if (!firebaseUID) {
       return NextResponse.json(
@@ -23,11 +24,11 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!email) {
+    if (!email && !photoURL) {
       return NextResponse.json(
         {
           success: false,
-          message: "Missing email"
+          message: "Missing email or photoURL"
         },
         { status: 400 }
       )
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
       { firebaseUID },
       {
         $set: {
-          email
+          ...(email ? { email } : {}),
+          ...(photoURL ? { firebasePhotoURL: photoURL } : {})
         }
       },
       { new: true }
@@ -57,27 +59,29 @@ export async function POST(req: Request) {
       { firebaseUID },
       {
         $set: {
-          email
+          ...(email ? { email } : {}),
+          ...(photoURL ? { firebasePhotoURL: photoURL } : {})
         }
       },
       { new: true }
     )
 
-    console.log("SUPPLIER_PROFILE_DEBUG: Synced supplier email", {
+    console.log("SUPPLIER_PROFILE_DEBUG: Synced supplier profile fields", {
       firebaseUID,
-      email
+      hasEmail: Boolean(email),
+      hasPhotoURL: Boolean(photoURL)
     })
 
     return NextResponse.json({
       success: true,
-      message: "Supplier email synced"
+      message: "Supplier profile synced"
     })
   } catch (error) {
-    console.error("SUPPLIER_PROFILE_DEBUG: Failed to sync supplier email", error)
+    console.error("SUPPLIER_PROFILE_DEBUG: Failed to sync supplier profile", error)
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to sync supplier email"
+        message: "Failed to sync supplier profile"
       },
       { status: 500 }
     )

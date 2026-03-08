@@ -28,6 +28,18 @@ export default function UserDashboard() {
   const [submitting, setSubmitting] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState("")
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    rollNo: "",
+    branch: "",
+    section: "",
+    year: "",
+    phone: ""
+  })
 
   const [file, setFile] = useState<File | null>(null)
   const [alternatePhone, setAlternatePhone] = useState("")
@@ -79,6 +91,31 @@ export default function UserDashboard() {
     return () => unsubscribe()
 
   }, [])
+
+  const openProfileModal = () => {
+    if (!userData) return
+
+    setProfileForm({
+      name: String(userData.name || ""),
+      rollNo: String(userData.rollNo || ""),
+      branch: String(userData.branch || ""),
+      section: String(userData.section || ""),
+      year: String(userData.year || ""),
+      phone: String(userData.phone || "")
+    })
+    setPhotoPreview(
+      String(
+        userData.displayPhotoURL ||
+        userData.photoURL ||
+        userData.firebasePhotoURL ||
+        auth.currentUser?.photoURL ||
+        ""
+      )
+    )
+    setPhotoFile(null)
+    setIsEditingProfile(false)
+    setShowProfile(true)
+  }
 
   function generateChartData(orders:any[], duration:string){
 
@@ -166,6 +203,132 @@ export default function UserDashboard() {
 
   }
 
+  const handleProfilePhotoChange = (selectedFile: File | null) => {
+    setPhotoFile(selectedFile)
+    if (!selectedFile) {
+      setPhotoPreview(
+        String(
+          userData?.displayPhotoURL ||
+          userData?.photoURL ||
+          userData?.firebasePhotoURL ||
+          auth.currentUser?.photoURL ||
+          ""
+        )
+      )
+      return
+    }
+
+    const localUrl = URL.createObjectURL(selectedFile)
+    setPhotoPreview(localUrl)
+  }
+
+  const saveUserProfile = async () => {
+    const user = auth.currentUser
+    if (!user || !userData) {
+      toast.error("Please login again")
+      return
+    }
+
+    if (!profileForm.name.trim()) {
+      toast.error("Name is required")
+      return
+    }
+
+    if (!/^\d+$/.test(profileForm.rollNo.trim())) {
+      toast.error("Roll number must be numeric")
+      return
+    }
+
+    if (!/^[A-Za-z ]+$/.test(profileForm.branch.trim())) {
+      toast.error("Branch must contain only text")
+      return
+    }
+
+    if (!/^[A-Za-z0-9-]+$/.test(profileForm.section.trim())) {
+      toast.error("Section must contain only letters, numbers or '-'")
+      return
+    }
+
+    const yearNumber = Number(profileForm.year)
+    if (!Number.isInteger(yearNumber) || yearNumber < 1 || yearNumber > 8) {
+      toast.error("Year must be a number between 1 and 8")
+      return
+    }
+
+    if (!/^\d{10,15}$/.test(profileForm.phone.trim())) {
+      toast.error("Phone must be 10 to 15 digits")
+      return
+    }
+
+    setSavingProfile(true)
+
+    try {
+      let nextPhotoURL = String(
+        userData.displayPhotoURL || userData.photoURL || userData.firebasePhotoURL || ""
+      )
+
+      if (photoFile) {
+        const photoFormData = new FormData()
+        photoFormData.append("file", photoFile)
+        photoFormData.append("firebaseUID", user.uid)
+
+        const photoRes = await fetch("/api/user/upload-photo", {
+          method: "POST",
+          body: photoFormData
+        })
+
+        const photoData = await photoRes.json()
+
+        if (!photoRes.ok || !photoData.success) {
+          toast.error(photoData.message || "Failed to upload profile photo")
+          setSavingProfile(false)
+          return
+        }
+
+        nextPhotoURL = String(photoData.photoURL || nextPhotoURL)
+      }
+
+      const res = await fetch("/api/user/update-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          firebaseUID: user.uid,
+          name: profileForm.name.trim(),
+          rollNo: profileForm.rollNo.trim(),
+          branch: profileForm.branch.trim(),
+          section: profileForm.section.trim(),
+          year: yearNumber,
+          phone: profileForm.phone.trim()
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        toast.error(data.message || "Failed to update profile")
+        setSavingProfile(false)
+        return
+      }
+
+      const nextUser = {
+        ...data.user,
+        photoURL: nextPhotoURL,
+        displayPhotoURL: nextPhotoURL
+      }
+
+      setUserData(nextUser)
+      setPhotoPreview(nextPhotoURL)
+      setPhotoFile(null)
+      setIsEditingProfile(false)
+      toast.success("Profile updated")
+    } catch {
+      toast.error("Failed to update profile")
+    }
+
+    setSavingProfile(false)
+  }
+
   const totalOrders=orders.length
   const pending=orders.filter(o=>o.status==="pending").length
   const completed=orders.filter(o=>o.status==="completed").length
@@ -184,7 +347,7 @@ export default function UserDashboard() {
 
 <DashboardNavbar
 orderCount={totalOrders}
-onProfileClick={()=>setShowProfile(true)}
+onProfileClick={openProfileModal}
 />
 
 <div className="px-6 md:px-16 py-14 space-y-16">
@@ -400,9 +563,9 @@ fillOpacity={0.25}
 
 {showProfile && (
 
-<div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50">
+<div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
 
-<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 w-[500px] relative">
+<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 w-full max-w-[560px] relative">
 
 <button
 onClick={()=>setShowProfile(false)}
@@ -413,23 +576,153 @@ className="absolute top-4 right-4"
 
 <h2 className="text-2xl mb-6">My Profile</h2>
 
-<div className="space-y-3 text-gray-300">
+<div className="flex justify-center mb-6">
+{photoPreview ? (
+// eslint-disable-next-line @next/next/no-img-element
+<img
+src={photoPreview}
+alt={userData?.name || "User"}
+className="w-24 h-24 rounded-full object-cover border border-white/20"
+/>
+) : (
+<div className="w-24 h-24 rounded-full bg-indigo-500/30 border border-indigo-300/30 flex items-center justify-center text-3xl font-bold text-indigo-100">
+{String(userData?.name || "U").charAt(0).toUpperCase()}
+</div>
+)}
+</div>
 
-<p><strong>Name:</strong> {userData?.name}</p>
+{isEditingProfile && (
+<div className="mb-5">
+<label className="text-sm text-gray-400 mb-1 block">Upload Profile Photo</label>
+<input
+type="file"
+accept="image/*"
+onChange={(e)=>handleProfilePhotoChange(e.target.files?.[0] || null)}
+className="input w-full"
+/>
+</div>
+)}
 
-<p>
-<strong>Email:</strong>
-{userData?.email || auth.currentUser?.email}
-</p>
+<div className="space-y-4 text-gray-300">
+<div>
+<p className="text-gray-400">Name</p>
+<input
+value={profileForm.name}
+onChange={(e)=>setProfileForm((prev)=>({...prev,name:e.target.value}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
 
-<p><strong>Roll:</strong> {userData?.rollNo}</p>
+<div>
+<p className="text-gray-400">Email</p>
+<input
+value={String(userData?.email || auth.currentUser?.email || "")}
+readOnly
+className="input w-full opacity-70"
+/>
+</div>
 
-<p><strong>Branch:</strong> {userData?.branch}</p>
+<div className="grid md:grid-cols-2 gap-4">
+<div>
+<p className="text-gray-400">Roll No</p>
+<input
+value={profileForm.rollNo}
+onChange={(e)=>setProfileForm((prev)=>({...prev,rollNo:e.target.value.replace(/\D/g,"")}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
 
-<p><strong>Year:</strong> {userData?.year}</p>
+<div>
+<p className="text-gray-400">Phone</p>
+<input
+value={profileForm.phone}
+onChange={(e)=>setProfileForm((prev)=>({...prev,phone:e.target.value.replace(/\D/g,"")}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
+</div>
 
-<p><strong>Phone:</strong> {userData?.phone}</p>
+<div className="grid md:grid-cols-3 gap-4">
+<div>
+<p className="text-gray-400">Branch</p>
+<input
+value={profileForm.branch}
+onChange={(e)=>setProfileForm((prev)=>({...prev,branch:e.target.value}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
 
+<div>
+<p className="text-gray-400">Section</p>
+<input
+value={profileForm.section}
+onChange={(e)=>setProfileForm((prev)=>({...prev,section:e.target.value}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
+
+<div>
+<p className="text-gray-400">Year</p>
+<input
+value={profileForm.year}
+onChange={(e)=>setProfileForm((prev)=>({...prev,year:e.target.value.replace(/\D/g,"")}))}
+readOnly={!isEditingProfile}
+className={`input w-full ${!isEditingProfile ? "opacity-80" : ""}`}
+/>
+</div>
+</div>
+</div>
+
+<div className="mt-7 flex flex-col gap-3">
+{!isEditingProfile ? (
+<button
+onClick={()=>setIsEditingProfile(true)}
+className="w-full bg-indigo-500 hover:bg-indigo-600 transition py-2 rounded-lg"
+>
+Edit Profile
+</button>
+) : (
+<>
+<button
+onClick={saveUserProfile}
+disabled={savingProfile}
+className="w-full bg-indigo-500 hover:bg-indigo-600 transition py-2 rounded-lg disabled:opacity-60"
+>
+{savingProfile ? "Saving..." : "Save Changes"}
+</button>
+<button
+onClick={()=>{
+setIsEditingProfile(false)
+setProfileForm({
+name: String(userData?.name || ""),
+rollNo: String(userData?.rollNo || ""),
+branch: String(userData?.branch || ""),
+section: String(userData?.section || ""),
+year: String(userData?.year || ""),
+phone: String(userData?.phone || "")
+})
+setPhotoFile(null)
+setPhotoPreview(
+String(
+userData?.displayPhotoURL ||
+userData?.photoURL ||
+userData?.firebasePhotoURL ||
+auth.currentUser?.photoURL ||
+""
+)
+)
+}}
+className="w-full bg-white/10 hover:bg-white/20 transition py-2 rounded-lg"
+>
+Cancel
+</button>
+</>
+)}
 </div>
 
 </div>

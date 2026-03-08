@@ -64,6 +64,7 @@ await User.findOneAndUpdate(
 {
 firebaseUID: body.firebaseUID,
 email: body.email || undefined,
+firebasePhotoURL: body.photoURL || undefined,
 name,
 phone,
 rollNo,
@@ -92,6 +93,7 @@ const supplier = await Supplier.create({
 firebaseUID: body.firebaseUID,
 name,
 email: body.email || undefined,
+firebasePhotoURL: body.photoURL || undefined,
 phone,
 rollNo,
 branch,
@@ -110,6 +112,7 @@ await User.findOneAndUpdate(
 {
 firebaseUID: body.firebaseUID,
 email: body.email || undefined,
+firebasePhotoURL: body.photoURL || undefined,
 name,
 phone,
 rollNo,

@@ -19,5 +19,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  return NextResponse.json({ user })
+  const userObj = user.toObject()
+
+  return NextResponse.json({
+    user: {
+      ...userObj,
+      displayPhotoURL: userObj.photoURL || userObj.firebasePhotoURL || ""
+    }
+  })
 }

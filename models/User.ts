@@ -14,6 +14,8 @@ const UserSchema = new mongoose.Schema({
   },
 
   email:String,
+  photoURL:String,
+  firebasePhotoURL:String,
 
   phone:{
     type:String,

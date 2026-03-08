@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter } from "next/navigation"
+import { isOwnerEmail } from "@/lib/owner-access"
 
 export default function RoleGuard({
   children,
@@ -22,6 +23,11 @@ export default function RoleGuard({
 
       if(!user){
         router.push("/user/login")
+        return
+      }
+
+      if (isOwnerEmail(user.email)) {
+        setLoading(false)
         return
       }
 

@@ -6,6 +6,7 @@ import { onAuthStateChanged } from "firebase/auth"
 import toast from "react-hot-toast"
 import { pusherClient } from "@/lib/pusher-client"
 import SupplierGuard from "@/components/SupplierGuard"
+import ProfileCard from "@/components/ProfileCard"
 
 type SupplierOrderDetail = {
   _id: string
@@ -22,6 +23,18 @@ type SupplierOrderDetail = {
   estimatedPrice?: number
   finalPrice?: number | null
   fileURL?: string
+  userProfile?: {
+    name?: string
+    email?: string
+    phone?: string
+    rollNo?: string
+    branch?: string
+    year?: string | number
+    section?: string
+    photoURL?: string
+    firebasePhotoURL?: string
+    displayPhotoURL?: string
+  }
 }
 
 export default function SupplierOrders(){
@@ -70,7 +83,8 @@ headers:{
 },
 body: JSON.stringify({
 firebaseUID:user.uid,
-email:user.email || user.providerData?.[0]?.email || ""
+email:user.email || user.providerData?.[0]?.email || "",
+photoURL:user.photoURL || ""
 })
 }).catch(()=>{})
 
@@ -93,18 +107,36 @@ channel.bind("order-updated",(updatedOrder:SupplierOrderDetail)=>{
 
 setOrders(prev =>
 prev.map(order =>
-order._id===updatedOrder._id ? updatedOrder : order
+order._id===updatedOrder._id
+? {
+...order,
+...updatedOrder,
+userProfile: updatedOrder.userProfile ?? order.userProfile
+}
+: order
 )
 )
 
 setAvailable(prev =>
 prev.map(order =>
-order._id===updatedOrder._id ? updatedOrder : order
+order._id===updatedOrder._id
+? {
+...order,
+...updatedOrder,
+userProfile: updatedOrder.userProfile ?? order.userProfile
+}
+: order
 )
 )
 
 setSelectedOrder((prev)=>
-prev && prev._id===updatedOrder._id ? updatedOrder : prev
+prev && prev._id===updatedOrder._id
+? {
+...prev,
+...updatedOrder,
+userProfile: updatedOrder.userProfile ?? prev.userProfile
+}
+: prev
 )
 
 })
@@ -520,10 +552,17 @@ Cancel
 Order Details
 </h2>
 
-<p>User: {selectedOrder.userName}</p>
+{/* <p>User: {selectedOrder.userName}</p>
 <p>Phone: {selectedOrder.phone}</p>
 <p>Class: {selectedOrder.class}</p>
-<p>Roll No: {selectedOrder.rollNo}</p>
+<p>Roll No: {selectedOrder.rollNo}</p> */}
+
+{selectedOrder.userProfile && (
+<ProfileCard
+title="User Profile"
+profile={selectedOrder.userProfile}
+/>
+)}
 
 <p>
 Pages:

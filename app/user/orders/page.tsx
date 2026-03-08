@@ -7,6 +7,7 @@ import AuthGuard from "@/components/AuthGuard"
 import { pusherClient } from "@/lib/pusher-client"
 import toast from "react-hot-toast"
 import { onAuthStateChanged } from "firebase/auth"
+import ProfileCard from "@/components/ProfileCard"
 
 declare global {
 interface Window {
@@ -20,6 +21,8 @@ const [orders,setOrders] = useState<any[]>([])
 const [loading,setLoading] = useState(true)
 const [selectedOrder,setSelectedOrder] = useState<any>(null)
 const [paying,setPaying] = useState(false)
+const [showSupplierPeek,setShowSupplierPeek] = useState(false)
+const [showSupplierCard,setShowSupplierCard] = useState(false)
 
 useEffect(()=>{
 
@@ -62,12 +65,26 @@ channel.bind("order-updated",(updatedOrder:any)=>{
 
 setOrders(prev =>
 prev.map(order =>
-order._id===updatedOrder._id ? updatedOrder : order
+order._id===updatedOrder._id
+? {
+...order,
+...updatedOrder,
+supplierName: updatedOrder.supplierName ?? order.supplierName,
+supplierProfile: updatedOrder.supplierProfile ?? order.supplierProfile
+}
+: order
 )
 )
 
 setSelectedOrder((prev:any) =>
-prev && prev._id===updatedOrder._id ? updatedOrder : prev
+prev && prev._id===updatedOrder._id
+? {
+...prev,
+...updatedOrder,
+supplierName: updatedOrder.supplierName ?? prev.supplierName,
+supplierProfile: updatedOrder.supplierProfile ?? prev.supplierProfile
+}
+: prev
 )
 
 toast.success("Order status updated")
@@ -367,7 +384,11 @@ className={`px-4 py-1 text-xs rounded-full font-semibold tracking-wide ${getStat
 
 
 <button
-onClick={()=>setSelectedOrder(order)}
+onClick={()=>{
+setShowSupplierPeek(false)
+setShowSupplierCard(false)
+setSelectedOrder(order)
+}}
 className="mt-6 text-indigo-400 hover:text-indigo-300 text-sm font-medium"
 >
 View Details →
@@ -394,10 +415,10 @@ className="mt-4 w-full bg-green-500 px-4 py-2 rounded-xl font-semibold disabled:
 
 {selectedOrder &&(
 
-<div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50">
+<div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
 
 
-<div className="bg-card w-full max-w-5xl p-8 rounded-3xl shadow-2xl">
+<div className="bg-card w-full max-w-5xl p-8 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
 
 
 <div className="grid md:grid-cols-2 gap-12">
@@ -429,7 +450,40 @@ Order Details
 
 <p>Payment: {selectedOrder.paymentStatus}</p>
 
-<p>Supplier: {selectedOrder.supplierName || "Not assigned"}</p>
+<div className="relative">
+<p>
+Supplier:
+{selectedOrder.supplierName ? (
+<>
+{" "}
+<button
+onMouseEnter={()=>setShowSupplierPeek(true)}
+onMouseLeave={()=>setShowSupplierPeek(false)}
+onClick={()=>setShowSupplierCard(true)}
+className="text-indigo-400 underline underline-offset-2 hover:text-indigo-300"
+>
+{selectedOrder.supplierName}
+</button>
+</>
+) : (
+" Not assigned"
+)}
+</p>
+
+{showSupplierPeek && selectedOrder.supplierProfile && !showSupplierCard && (
+<div
+onMouseEnter={()=>setShowSupplierPeek(true)}
+onMouseLeave={()=>setShowSupplierPeek(false)}
+className="absolute left-0 top-7 z-20 w-72 rounded-2xl border border-white/10 bg-[#101421] p-4 shadow-2xl"
+>
+<p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Supplier Preview</p>
+<p className="font-semibold">{selectedOrder.supplierProfile.name || selectedOrder.supplierName}</p>
+<p className="text-sm text-gray-300">{selectedOrder.supplierProfile.email || "No email"}</p>
+<p className="text-sm text-gray-300">{selectedOrder.supplierProfile.phone || "No phone"}</p>
+<p className="text-xs text-indigo-300 mt-2">Click name to open full profile</p>
+</div>
+)}
+</div>
 
 <p>
 Created: {new Date(selectedOrder.createdAt).toLocaleString()}
@@ -590,7 +644,11 @@ Download Receipt (.doc)
 )}
 
 <button
-onClick={()=>setSelectedOrder(null)}
+onClick={()=>{
+setShowSupplierPeek(false)
+setShowSupplierCard(false)
+setSelectedOrder(null)
+}}
 className="bg-primary px-6 py-2 rounded-xl text-black font-semibold"
 >
 Close
@@ -602,6 +660,23 @@ Close
 
 </div>
 
+)}
+
+{showSupplierCard && selectedOrder?.supplierProfile && (
+<div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+<div className="bg-card w-full max-w-md p-6 rounded-2xl border border-white/10 shadow-2xl">
+<ProfileCard
+title="Supplier Profile"
+profile={selectedOrder.supplierProfile}
+/>
+<button
+onClick={()=>setShowSupplierCard(false)}
+className="mt-4 w-full bg-indigo-500 px-4 py-2 rounded-xl font-semibold"
+>
+Close Supplier Card
+</button>
+</div>
+</div>
 )}
 
 </div>

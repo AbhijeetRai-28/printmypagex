@@ -10,6 +10,8 @@ unique:true
 
 name:String,
 email:String,
+photoURL:String,
+firebasePhotoURL:String,
 phone:String,
 rollNo:String,
 branch:String,

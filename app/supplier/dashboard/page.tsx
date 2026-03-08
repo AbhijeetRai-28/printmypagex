@@ -172,7 +172,8 @@ headers:{
 },
 body: JSON.stringify({
 firebaseUID:user.uid,
-email:user.email || user.providerData?.[0]?.email || ""
+email:user.email || user.providerData?.[0]?.email || "",
+photoURL:user.photoURL || ""
 })
 }).catch(()=>{})
 
@@ -304,7 +305,6 @@ Supplier Dashboard
 </h1>
 
 </div>
-
 
 {/* FILTER */}
 

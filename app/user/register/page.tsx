@@ -27,7 +27,8 @@ export default function UserRegister() {
       },
       body: JSON.stringify({
         firebaseUID: uid,
-        email: userEmail
+        email: userEmail,
+        photoURL: auth.currentUser?.photoURL || ""
       })
     })
 

@@ -9,28 +9,25 @@ import {
 } from "@/lib/form-validation"
 
 export async function POST(req: Request) {
-
   try {
     await connectDB()
 
     const body = await req.json()
 
-    if (!body.firebaseUID) {
+    const firebaseUID = String(body?.firebaseUID || "").trim()
+    const name = normalizeText(String(body?.name || ""))
+    const rollNo = String(body?.rollNo || "").trim()
+    const branch = normalizeText(String(body?.branch || ""))
+    const section = normalizeText(String(body?.section || ""))
+    const phone = String(body?.phone || "").trim()
+    const year = Number(body?.year)
+
+    if (!firebaseUID) {
       return NextResponse.json(
-        {
-          success: false,
-          message: "Missing firebaseUID"
-        },
+        { success: false, message: "Missing firebaseUID" },
         { status: 400 }
       )
     }
-
-    const name = normalizeText(String(body.name || ""))
-    const rollNo = String(body.rollNo || "").trim()
-    const branch = normalizeText(String(body.branch || ""))
-    const section = normalizeText(String(body.section || ""))
-    const phone = String(body.phone || "").trim()
-    const year = Number(body.year)
 
     if (!name || !isAlphabeticText(name)) {
       return NextResponse.json(
@@ -75,42 +72,39 @@ export async function POST(req: Request) {
     }
 
     const user = await User.findOneAndUpdate(
-      { firebaseUID: body.firebaseUID },
+      { firebaseUID },
       {
-        firebaseUID: body.firebaseUID,
-        email: body.email || undefined,
-        firebasePhotoURL: body.photoURL || undefined,
-        name,
-        rollNo,
-        branch,
-        year,
-        section,
-        phone,
-        approved: true
+        $set: {
+          name,
+          rollNo,
+          branch,
+          section,
+          year,
+          phone
+        }
       },
-      {
-        upsert: true,
-        new: true
-      }
+      { new: true }
     )
 
-    console.log("USER_PROFILE_DEBUG: Profile upserted", {
-      firebaseUID: body.firebaseUID,
-      hasEmail: Boolean(body.email)
-    })
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: "User profile not found" },
+        { status: 404 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Profile saved successfully",
-      user
+      message: "Profile updated",
+      user: {
+        ...user.toObject(),
+        displayPhotoURL: user.photoURL || user.firebasePhotoURL || ""
+      }
     })
   } catch (error) {
-    console.error("USER_PROFILE_DEBUG: Create/Update failed", error)
+    console.error("USER_PROFILE_UPDATE_ERROR:", error)
     return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to save profile"
-      },
+      { success: false, message: "Failed to update profile" },
       { status: 500 }
     )
   }

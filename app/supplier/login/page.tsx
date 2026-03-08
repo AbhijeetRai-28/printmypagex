@@ -10,6 +10,7 @@ import {
   signInWithPopup,
   signOut
 } from "firebase/auth"
+import { isOwnerEmail } from "@/lib/owner-access"
 
 export default function SupplierLogin() {
   const [email, setEmail] = useState("")
@@ -26,7 +27,8 @@ export default function SupplierLogin() {
       },
       body: JSON.stringify({
         firebaseUID: uid,
-        email: userEmail
+        email: userEmail,
+        photoURL: auth.currentUser?.photoURL || ""
       })
     })
 
@@ -37,7 +39,8 @@ export default function SupplierLogin() {
       },
       body: JSON.stringify({
         firebaseUID: uid,
-        email: userEmail
+        email: userEmail,
+        photoURL: auth.currentUser?.photoURL || ""
       })
     })
   }
@@ -45,6 +48,11 @@ export default function SupplierLogin() {
   const routeSupplier = async (uid: string) => {
     const res = await fetch(`/api/supplier/me?firebaseUID=${uid}`)
     const data = await res.json()
+
+    if (isOwnerEmail(auth.currentUser?.email || "")) {
+      window.location.href = "/supplier/dashboard"
+      return
+    }
 
     if (!data.supplier) {
       window.location.href = "/supplier/apply"
@@ -81,7 +89,7 @@ export default function SupplierLogin() {
       const result = await signInWithEmailAndPassword(auth, normalizedEmail, password)
       const user = result.user
 
-      if (!user.emailVerified) {
+      if (!user.emailVerified && !isOwnerEmail(user.email)) {
         await signOut(auth)
         setError("Please verify your email first. Use Resend Verification Email.")
         return

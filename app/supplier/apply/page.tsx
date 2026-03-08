@@ -53,6 +53,7 @@ export default function SupplierApply() {
       body: JSON.stringify({
         firebaseUID: user.uid,
         email: user.email || user.providerData?.[0]?.email || "",
+        photoURL: user.photoURL || "",
         ...form
       })
     })

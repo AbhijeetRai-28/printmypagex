@@ -31,7 +31,19 @@ return{
 userName:user?.name || "",
 class:user?.section || "",
 rollNo:user?.rollNo || "",
-phone:user?.phone || ""
+phone:user?.phone || "",
+userProfile:{
+name:user?.name || "",
+email:user?.email || "",
+phone:user?.phone || "",
+rollNo:user?.rollNo || "",
+branch:user?.branch || "",
+year:user?.year || "",
+section:user?.section || "",
+photoURL:user?.photoURL || "",
+firebasePhotoURL:user?.firebasePhotoURL || "",
+displayPhotoURL:(user?.photoURL || user?.firebasePhotoURL || "")
+}
 }
 
 })

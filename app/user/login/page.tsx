@@ -11,6 +11,7 @@ import {
   signOut
 } from "firebase/auth"
 import Navbar from "@/components/Navbar"
+import { isOwnerEmail } from "@/lib/owner-access"
 
 export default function UserLogin() {
   const [email, setEmail] = useState("")
@@ -27,7 +28,8 @@ export default function UserLogin() {
       },
       body: JSON.stringify({
         firebaseUID: uid,
-        email: userEmail
+        email: userEmail,
+        photoURL: auth.currentUser?.photoURL || ""
       })
     })
 
@@ -69,7 +71,7 @@ export default function UserLogin() {
       const result = await signInWithEmailAndPassword(auth, email.trim(), password)
       const user = result.user
 
-      if (!user.emailVerified) {
+      if (!user.emailVerified && !isOwnerEmail(user.email)) {
         await signOut(auth)
         setError("Please verify your email first. You can use Resend Verification Email.")
         return

@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       orders.map(async (order) => {
 
         let supplierName = null
+        let supplierProfile = null
 
         if (order.supplierUID) {
 
@@ -36,12 +37,26 @@ export async function GET(req: Request) {
           })
 
           supplierName = supplier?.name || null
+          supplierProfile = supplier
+            ? {
+                name: supplier.name || "",
+                email: supplier.email || "",
+                phone: supplier.phone || "",
+                rollNo: supplier.rollNo || "",
+                branch: supplier.branch || "",
+                year: supplier.year || "",
+                photoURL: supplier.photoURL || "",
+                firebasePhotoURL: supplier.firebasePhotoURL || "",
+                displayPhotoURL: supplier.photoURL || supplier.firebasePhotoURL || ""
+              }
+            : null
 
         }
 
         return {
           ...order.toObject(),
-          supplierName
+          supplierName,
+          supplierProfile
         }
 
       })

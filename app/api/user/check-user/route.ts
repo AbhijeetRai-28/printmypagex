@@ -23,18 +23,20 @@ export async function POST(req: Request){
   })
 
   if(user){
-    if (body.email) {
+    if (body.email || body.photoURL) {
       await User.updateOne(
         { firebaseUID: body.firebaseUID },
         {
           $set: {
-            email: body.email
+            ...(body.email ? { email: body.email } : {}),
+            ...(body.photoURL ? { firebasePhotoURL: body.photoURL } : {})
           }
         }
       )
       console.log("USER_PROFILE_DEBUG: Synced email from login", {
         firebaseUID: body.firebaseUID,
-        hasEmailInBody: Boolean(body.email)
+        hasEmailInBody: Boolean(body.email),
+        hasPhotoURLInBody: Boolean(body.photoURL)
       })
     }
 
