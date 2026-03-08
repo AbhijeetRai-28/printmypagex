@@ -2,7 +2,7 @@
 
 import Navbar from "@/components/Navbar"
 import { auth, provider } from "@/lib/firebase"
-import { signInWithPopup } from "firebase/auth"
+import { signInWithPopup, signOut } from "firebase/auth"
 
 export default function UserRegister() {
 
@@ -27,6 +27,11 @@ export default function UserRegister() {
     const data = await res.json()
 
     if (data.user) {
+      if (data.user.active === false || data.user.approved === false) {
+        await signOut(auth)
+        alert("Your account is not allowed to login right now.")
+        return
+      }
       window.location.href = "/user/dashboard"
     } else {
       window.location.href = "/complete-profile"

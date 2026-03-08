@@ -1,63 +1,18 @@
 "use client"
 
-import { useEffect,useState } from "react"
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
 
 export default function AdminSuppliers(){
-
-const [suppliers,setSuppliers] = useState([])
-
-const load = async()=>{
-
-const res = await fetch("/api/admin/suppliers")
-
-const data = await res.json()
-
-setSuppliers(data.suppliers)
-
-}
+const router = useRouter()
 
 useEffect(()=>{
-load()
-},[])
-
-const approve = async(id:string)=>{
-
-await fetch("/api/admin/approve-supplier",{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify({id})
-
-})
-
-load()
-
-}
+router.replace("/admin")
+},[router])
 
 return(
-
-<div style={{padding:"40px"}}>
-
-<h1>Supplier Requests</h1>
-
-{suppliers.map((s:any)=>(
-
-<div key={s._id}>
-
-<p>{s.name}</p>
-
-<button onClick={()=>approve(s._id)}>
-Approve
-</button>
-
-</div>
-
-))}
-
+<div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+<p>Redirecting to admin portal...</p>
 </div>
 
 )

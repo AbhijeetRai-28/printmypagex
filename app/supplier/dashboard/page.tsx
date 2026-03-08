@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
+import SupplierGuard from "@/components/SupplierGuard"
 
 import {
 ResponsiveContainer,
@@ -38,6 +39,23 @@ type ChartPoint = {
   revenue: number
 }
 
+type WalletSummary = {
+  grossDeliveredRevenue: number
+  razorpayFees: number
+  gstOnFees: number
+  netRevenue: number
+  totalClaimed: number
+  pendingRequested: number
+  availableToClaim: number
+}
+
+type PayoutRequest = {
+  _id: string
+  amount: number
+  status: "pending" | "approved" | "rejected"
+  createdAt: string
+}
+
 const STATUS_COLORS = ["#60a5fa","#a78bfa","#34d399","#f59e0b","#10b981","#f87171"]
 
 export default function SupplierDashboard() {
@@ -46,6 +64,10 @@ const [orders,setOrders] = useState<SupplierOrder[]>([])
 const [availableOrders,setAvailableOrders] = useState<SupplierOrder[]>([])
 const [loading,setLoading] = useState(true)
 const [duration,setDuration] = useState("7d")
+const [wallet,setWallet] = useState<WalletSummary | null>(null)
+const [payoutRequests,setPayoutRequests] = useState<PayoutRequest[]>([])
+const [claimAmount,setClaimAmount] = useState("")
+const [claiming,setClaiming] = useState(false)
 
 const loadOrders = async(uid:string)=>{
 
@@ -68,9 +90,78 @@ setLoading(false)
 
 }
 
+const loadWallet = async(token:string)=>{
+const res = await fetch("/api/supplier/wallet",{
+headers:{
+Authorization:`Bearer ${token}`
+}
+})
+
+const data = await res.json()
+
+if(res.ok && data.success){
+setWallet(data.wallet || null)
+setPayoutRequests(data.requests || [])
+}
+}
+
+const requestPayout = async()=>{
+if(!wallet){
+alert("Wallet data is not ready yet")
+return
+}
+
+const amount = Number(claimAmount)
+if(!Number.isFinite(amount) || amount<=0){
+alert("Enter a valid amount")
+return
+}
+
+if(amount > wallet.availableToClaim){
+alert(`Amount exceeds available wallet balance: ₹${wallet.availableToClaim}`)
+return
+}
+
+const user = auth.currentUser
+if(!user){
+alert("Login required")
+return
+}
+
+setClaiming(true)
+
+try{
+const token = await user.getIdToken(true)
+const res = await fetch("/api/supplier/payout-request",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+Authorization:`Bearer ${token}`
+},
+body:JSON.stringify({amount})
+})
+
+const data = await res.json()
+
+if(!res.ok || !data.success){
+alert(data.message || "Failed to submit payout request")
+setClaiming(false)
+return
+}
+
+setClaimAmount("")
+await loadWallet(token)
+alert("Payout request sent to admin for approval")
+}catch{
+alert("Failed to submit payout request")
+}
+
+setClaiming(false)
+}
+
 useEffect(()=>{
 
-const unsubscribe = onAuthStateChanged(auth,(user)=>{
+const unsubscribe = onAuthStateChanged(auth,async(user)=>{
 
 if(!user) return
 
@@ -85,7 +176,11 @@ email:user.email || user.providerData?.[0]?.email || ""
 })
 }).catch(()=>{})
 
-loadOrders(user.uid)
+const token = await user.getIdToken(true)
+await Promise.all([
+loadOrders(user.uid),
+loadWallet(token)
+])
 
 })
 
@@ -197,7 +292,7 @@ totals.delivered > 0
 
 
 return(
-
+<SupplierGuard>
 <div className="max-w-6xl mx-auto p-8 space-y-10">
 
 {/* HEADER */}
@@ -272,6 +367,76 @@ className="px-4 py-2 bg-card rounded-lg"
 </div>
 
 </div>
+
+{wallet && (
+<div className="bg-card p-6 rounded-xl space-y-4">
+<h2 className="text-xl font-semibold">Supplier Wallet</h2>
+<div className="grid md:grid-cols-4 gap-4 text-sm">
+<div>
+<p className="text-gray-400">Gross Delivered Revenue</p>
+<p className="font-semibold text-lg">₹{wallet.grossDeliveredRevenue}</p>
+</div>
+<div>
+<p className="text-gray-400">Razorpay Fees</p>
+<p className="font-semibold text-lg">₹{wallet.razorpayFees}</p>
+</div>
+<div>
+<p className="text-gray-400">GST on Fees</p>
+<p className="font-semibold text-lg">₹{wallet.gstOnFees}</p>
+</div>
+<div>
+<p className="text-gray-400">Net Revenue</p>
+<p className="font-semibold text-lg">₹{wallet.netRevenue}</p>
+</div>
+<div>
+<p className="text-gray-400">Already Claimed</p>
+<p className="font-semibold text-lg">₹{wallet.totalClaimed}</p>
+</div>
+<div>
+<p className="text-gray-400">Pending Claim Requests</p>
+<p className="font-semibold text-lg">₹{wallet.pendingRequested}</p>
+</div>
+<div>
+<p className="text-gray-400">Available to Claim</p>
+<p className="font-semibold text-lg text-emerald-400">₹{wallet.availableToClaim}</p>
+</div>
+</div>
+
+<div className="flex flex-wrap items-center gap-3">
+<input
+type="number"
+min={1}
+step="0.01"
+value={claimAmount}
+onChange={(e)=>setClaimAmount(e.target.value)}
+placeholder="Enter claim amount"
+className="input w-64"
+/>
+<button
+onClick={requestPayout}
+disabled={claiming}
+className="px-4 py-2 bg-indigo-500 rounded-lg"
+>
+{claiming ? "Submitting..." : "Request Payout"}
+</button>
+</div>
+
+{payoutRequests.length>0 && (
+<div className="pt-3 border-t border-white/10">
+<p className="text-sm text-gray-400 mb-2">Recent payout requests</p>
+<div className="space-y-2 text-sm">
+{payoutRequests.slice(0,5).map((item)=>(
+<div key={item._id} className="flex justify-between border border-white/10 rounded-lg px-3 py-2">
+<span>₹{item.amount}</span>
+<span>{item.status}</span>
+<span>{new Date(item.createdAt).toLocaleString()}</span>
+</div>
+))}
+</div>
+</div>
+)}
+</div>
+)}
 
 {loading && (
 <p className="text-gray-400">Loading dashboard data...</p>
@@ -405,7 +570,7 @@ Delivered: <span className="font-semibold">{totals.delivered}</span> | Avg Deliv
 </div>
 
 </div>
-
+</SupplierGuard>
 )
 
 }

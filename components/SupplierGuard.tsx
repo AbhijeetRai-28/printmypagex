@@ -42,6 +42,12 @@ router.push("/supplier")
 return
 }
 
+if(!data.supplier.active){
+setLoading(false)
+router.push("/supplier")
+return
+}
+
 setLoading(false)
 
 })

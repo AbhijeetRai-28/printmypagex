@@ -5,16 +5,55 @@ import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
 import toast from "react-hot-toast"
 import { pusherClient } from "@/lib/pusher-client"
+import SupplierGuard from "@/components/SupplierGuard"
+
+type SupplierOrderDetail = {
+  _id: string
+  status: string
+  paymentStatus: string
+  createdAt: string
+  userName?: string
+  phone?: string
+  class?: string
+  rollNo?: string
+  printType?: string
+  estimatedPrice?: number
+  finalPrice?: number | null
+  fileURL?: string
+}
 
 export default function SupplierOrders(){
 
-const [orders,setOrders] = useState<any[]>([])
-const [available,setAvailable] = useState<any[]>([])
+const [orders,setOrders] = useState<SupplierOrderDetail[]>([])
+const [available,setAvailable] = useState<SupplierOrderDetail[]>([])
 const [loading,setLoading] = useState(true)
-const [selectedOrder,setSelectedOrder] = useState<any>(null)
+const [selectedOrder,setSelectedOrder] = useState<SupplierOrderDetail | null>(null)
 const [uid,setUid] = useState<string | null>(null)
 const [filter,setFilter] = useState("pending")
 const [verifiedPages,setVerifiedPages] = useState<number>(0)
+
+async function loadOrders(uid:string){
+
+try{
+
+const res1 = await fetch(`/api/orders/available?supplierUID=${uid}`)
+const data1 = await res1.json()
+
+const res2 = await fetch(`/api/orders/supplier?supplierUID=${uid}`)
+const data2 = await res2.json()
+
+setAvailable(data1.orders || [])
+setOrders(data2.orders || [])
+
+}catch{
+
+toast.error("Failed to load orders")
+
+}
+
+setLoading(false)
+
+}
 
 useEffect(()=>{
 
@@ -48,7 +87,7 @@ if(!uid) return
 
 const channel = pusherClient.subscribe(`supplier-${uid}`)
 
-channel.bind("order-updated",(updatedOrder:any)=>{
+channel.bind("order-updated",(updatedOrder:SupplierOrderDetail)=>{
 
 setOrders(prev =>
 prev.map(order =>
@@ -62,7 +101,7 @@ order._id===updatedOrder._id ? updatedOrder : order
 )
 )
 
-setSelectedOrder((prev:any)=>
+setSelectedOrder((prev)=>
 prev && prev._id===updatedOrder._id ? updatedOrder : prev
 )
 
@@ -73,30 +112,6 @@ pusherClient.unsubscribe(`supplier-${uid}`)
 }
 
 },[uid])
-
-
-const loadOrders = async(uid:string)=>{
-
-try{
-
-const res1 = await fetch(`/api/orders/available?supplierUID=${uid}`)
-const data1 = await res1.json()
-
-const res2 = await fetch(`/api/orders/supplier?supplierUID=${uid}`)
-const data2 = await res2.json()
-
-setAvailable(data1.orders || [])
-setOrders(data2.orders || [])
-
-}catch{
-
-toast.error("Failed to load orders")
-
-}
-
-setLoading(false)
-
-}
 
 
 const acceptOrder = async(id:string)=>{
@@ -277,7 +292,7 @@ return "bg-gray-500/20 text-gray-400 border border-gray-400/20"
 }
 
 
-let displayOrders:any[]=[]
+let displayOrders:SupplierOrderDetail[]=[]
 
 if(filter==="pending") displayOrders=available
 if(filter==="accepted") displayOrders=orders.filter(o=>o.status==="accepted")
@@ -297,7 +312,7 @@ displayOrders = Array.from(map.values())
 
 
 return(
-
+<SupplierGuard>
 <div className="px-6 md:px-20 xl:px-32 py-16">
 
 <h1 className="text-4xl font-bold mb-14 text-gradient">
@@ -667,7 +682,7 @@ Close
 )}
 
 </div>
-
+</SupplierGuard>
 )
 
 }

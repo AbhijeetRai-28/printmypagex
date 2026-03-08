@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
-import { onAuthStateChanged } from "firebase/auth"
+import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter } from "next/navigation"
 
 export default function RoleGuard({
@@ -40,9 +40,15 @@ export default function RoleGuard({
           return
         }
 
+        if (data.user.active === false || data.user.approved === false) {
+          await signOut(auth)
+          router.push("/user/login")
+          return
+        }
+
         setLoading(false)
 
-      }catch(err){
+      }catch{
         router.push("/")
       }
 
@@ -50,7 +56,7 @@ export default function RoleGuard({
 
     return ()=>unsubscribe()
 
-  },[])
+  },[role, router])
 
   if(loading){
     return(

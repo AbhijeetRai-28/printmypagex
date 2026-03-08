@@ -71,6 +71,11 @@ alert("Admin has not approved you yet")
 return
 }
 
+if(!data.supplier.active){
+alert("Your supplier account is currently inactive")
+return
+}
+
 window.location.href="/supplier/dashboard"
 
 }

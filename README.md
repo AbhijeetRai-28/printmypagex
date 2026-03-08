@@ -105,3 +105,28 @@ EMAIL_REPLY_TO=printmypagepsit@gmail.com
   - `EMAIL_NOT_CONFIGURED`
   - `EMAIL_SEND_ERROR`
 - Confirm recipients exist and have valid emails in DB.
+
+## Admin Portal (Owner-Only)
+
+The project now includes a secure admin portal:
+
+- `GET /admin/login` for owner login
+- `GET /admin` for full admin dashboard
+
+### Required environment variables
+
+Add these for server-side admin token verification:
+
+```bash
+FIREBASE_ADMIN_PROJECT_ID=your_firebase_project_id
+FIREBASE_ADMIN_CLIENT_EMAIL=your_service_account_client_email
+FIREBASE_ADMIN_PRIVATE_KEY=\"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n\"
+ADMIN_OWNER_EMAILS=owner1@gmail.com,owner2@gmail.com
+NEXT_PUBLIC_ADMIN_OWNER_EMAILS=owner1@gmail.com,owner2@gmail.com
+```
+
+Notes:
+
+- `ADMIN_OWNER_EMAILS` is enforced on server APIs.
+- `NEXT_PUBLIC_ADMIN_OWNER_EMAILS` is for client pre-check UX.
+- `/api/admin/database/clear` requires typed phrase: `CLEAR ENTIRE DATABASE` and owner email confirmation.
