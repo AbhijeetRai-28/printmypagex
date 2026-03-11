@@ -1,9 +1,22 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { onAuthStateChanged } from "firebase/auth"
-import { auth } from "@/lib/firebase"
-import RoleGuard from "@/components/RoleGuard"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { useRouter } from "next/navigation"
+import {
+  Activity,
+  AlertTriangle,
+  CreditCard,
+  Download,
+  Eye,
+  LogOut,
+  RefreshCcw,
+  Search,
+  Store,
+  Users,
+  Wallet,
+  Wrench
+} from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -19,6 +32,10 @@ import {
   XAxis,
   YAxis
 } from "recharts"
+import { auth } from "@/lib/firebase"
+import CandleThemeToggle from "@/components/CandleThemeToggle"
+import HeroBackground from "@/components/HeroBackground"
+import CursorDepth from "@/components/CursorDepth"
 
 type Tab = "overview" | "users" | "suppliers" | "orders" | "payments" | "payouts" | "danger"
 
@@ -41,16 +58,27 @@ type OverviewResponse = {
   }
 }
 
+type UserRole = "USER" | "SUPPLIER" | "ADMIN"
+
 type AdminUser = {
   _id?: string
   firebaseUID?: string
   name?: string
   email?: string
-  role: "USER" | "SUPPLIER" | "ADMIN"
+  phone?: string
+  rollNo?: string
+  branch?: string
+  section?: string
+  year?: number
+  photoURL?: string
+  firebasePhotoURL?: string
+  role: UserRole
   approved?: boolean
   active?: boolean
   orderCount?: number
+  paidCount?: number
   totalSpent?: number
+  createdAt?: string
 }
 
 type AdminSupplier = {
@@ -58,8 +86,15 @@ type AdminSupplier = {
   firebaseUID?: string
   name?: string
   email?: string
+  phone?: string
+  rollNo?: string
+  branch?: string
+  year?: string
+  photoURL?: string
+  firebasePhotoURL?: string
   approved?: boolean
   active?: boolean
+  createdAt?: string
   ordersHandled?: number
   paidOrders?: number
   grossDeliveredRevenue?: number
@@ -76,25 +111,40 @@ type AdminOrder = {
   _id: string
   userUID: string
   supplierUID?: string | null
-  user?: { name?: string; email?: string }
-  supplier?: { name?: string }
-  status: string
-  paymentStatus: string
+  requestType?: "global" | "specific"
+  alternatePhone?: string
+  duplex?: boolean
+  instruction?: string
+  printType?: "bw" | "color" | "glossy"
+  fileURL?: string
   pages?: number
-  verifiedPages?: number
+  verifiedPages?: number | null
   estimatedPrice?: number
-  finalPrice?: number
+  finalPrice?: number | null
+  paymentStatus: "unpaid" | "paid" | string
+  razorpayOrderId?: string | null
+  razorpayPaymentId?: string | null
+  paidAt?: string | null
+  status: string
+  acceptedAt?: string | null
+  deliveredAt?: string | null
+  cancelledAt?: string | null
   createdAt: string
+  user?: { name?: string; email?: string } | null
+  supplier?: { name?: string; email?: string; approved?: boolean; active?: boolean } | null
 }
 
 type PaymentLog = {
   orderId: string
   userUID: string
-  user?: { name?: string; email?: string }
+  user?: { name?: string; email?: string } | null
   amount: number
   paymentStatus: string
-  razorpayPaymentId?: string
+  status?: string
+  razorpayOrderId?: string | null
+  razorpayPaymentId?: string | null
   paidAt?: string | null
+  createdAt?: string
 }
 
 type AdminPayoutRequest = {
@@ -105,7 +155,7 @@ type AdminPayoutRequest = {
   note?: string
   createdAt: string
   processedAt?: string | null
-  supplier?: { name?: string; email?: string; phone?: string }
+  supplier?: { name?: string; email?: string; phone?: string } | null
 }
 
 type ClearDbResponse = {
@@ -116,16 +166,106 @@ type ClearDbResponse = {
   }
 }
 
-const COLORS = ["#22d3ee", "#fb7185", "#34d399", "#f59e0b", "#818cf8", "#f87171", "#c084fc"]
+type AdminResponse = {
+  message?: string
+  success?: boolean
+}
+
+type SpotlightResult = {
+  key: string
+  kind: "user" | "supplier" | "order" | "payment" | "payout"
+  title: string
+  subtitle: string
+  meta: string
+}
+
+const CHART_COLORS = ["#22d3ee", "#fb7185", "#34d399", "#f59e0b", "#818cf8", "#f87171", "#c084fc"]
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message
   return "Request failed"
 }
 
+function formatCurrency(value: number | null | undefined) {
+  return `INR ${Number(value || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 2
+  })}`
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  return date.toLocaleString()
+}
+
+function formatStatus(status: string | null | undefined) {
+  return String(status || "unknown").replace(/_/g, " ").toUpperCase()
+}
+
+function hasQueryMatch(query: string, fields: Array<string | number | null | undefined>) {
+  if (!query) return true
+  const normalized = query.toLowerCase()
+  return fields.some((field) => String(field || "").toLowerCase().includes(normalized))
+}
+
+function csvEscape(value: unknown) {
+  const raw = String(value ?? "")
+  const escaped = raw.replace(/"/g, '""')
+  return `"${escaped}"`
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  if (!rows.length) return
+
+  const headers = Object.keys(rows[0])
+  const content = [
+    headers.map((header) => csvEscape(header)).join(","),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(","))
+  ].join("\n")
+
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function getStatusBadge(status: string) {
+  const normalized = status.toLowerCase()
+
+  if (["delivered", "paid", "approved", "active"].includes(normalized)) {
+    return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
+  }
+
+  if (["pending", "awaiting_payment", "printing", "printed", "accepted", "unpaid"].includes(normalized)) {
+    return "bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30"
+  }
+
+  if (["rejected", "cancelled", "disapproved", "inactive"].includes(normalized)) {
+    return "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
+  }
+
+  return "bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30"
+}
+
+function copyText(value: string) {
+  if (!value) return
+  navigator.clipboard.writeText(value).catch(() => {})
+}
+
 export default function AdminPortalPage() {
+  const router = useRouter()
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [autoRefresh, setAutoRefresh] = useState(false)
+
   const [activeTab, setActiveTab] = useState<Tab>("overview")
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
 
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -134,11 +274,42 @@ export default function AdminPortalPage() {
   const [payments, setPayments] = useState<PaymentLog[]>([])
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([])
 
+  const [adminEmail, setAdminEmail] = useState("")
+  const [menuOpen, setMenuOpen] = useState(false)
+
   const [confirmPhrase, setConfirmPhrase] = useState("")
   const [confirmOwnerEmail, setConfirmOwnerEmail] = useState("")
+
   const [busyAction, setBusyAction] = useState("")
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
+
+  const [spotlightQuery, setSpotlightQuery] = useState("")
+
+  const [userQuery, setUserQuery] = useState("")
+  const [userRoleFilter, setUserRoleFilter] = useState<"ALL" | UserRole>("ALL")
+  const [userApprovalFilter, setUserApprovalFilter] = useState<"ALL" | "APPROVED" | "PENDING">("ALL")
+  const [userActivityFilter, setUserActivityFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL")
+
+  const [supplierQuery, setSupplierQuery] = useState("")
+  const [supplierApprovalFilter, setSupplierApprovalFilter] = useState<"ALL" | "APPROVED" | "PENDING">("ALL")
+  const [supplierActivityFilter, setSupplierActivityFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL")
+
+  const [orderQuery, setOrderQuery] = useState("")
+  const [orderStatusFilter, setOrderStatusFilter] = useState<"ALL" | AdminOrder["status"]>("ALL")
+  const [orderPaymentFilter, setOrderPaymentFilter] = useState<"ALL" | "paid" | "unpaid">("ALL")
+  const [orderAssignmentFilter, setOrderAssignmentFilter] = useState<"ALL" | "assigned" | "unassigned">("ALL")
+
+  const [paymentQuery, setPaymentQuery] = useState("")
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"ALL" | "paid" | "unpaid">("ALL")
+
+  const [payoutQuery, setPayoutQuery] = useState("")
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<"ALL" | "pending" | "approved" | "rejected">("ALL")
+  const [payoutNotes, setPayoutNotes] = useState<Record<string, string>>({})
+
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
+  const [selectedSupplier, setSelectedSupplier] = useState<AdminSupplier | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null)
 
   const adminFetch = useCallback(async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const currentUser = auth.currentUser
@@ -156,18 +327,21 @@ export default function AdminPortalPage() {
       }
     })
 
-    const data = (await res.json()) as { message?: string } & T
+    const data = (await res.json()) as AdminResponse & T
+
     if (!res.ok) {
-      throw new Error(data?.message || "Request failed")
+      if (res.status === 401 || res.status === 403) {
+        await signOut(auth).catch(() => {})
+        window.location.href = "/admin/login"
+        throw new Error("Session expired. Please login again.")
+      }
+      throw new Error(data.message || "Request failed")
     }
 
     return data
   }, [])
 
   const loadAll = useCallback(async () => {
-    setError("")
-    setMessage("")
-
     const [overviewRes, usersRes, suppliersRes, ordersRes, paymentsRes, payoutsRes] = await Promise.all([
       adminFetch<OverviewResponse>("/api/admin/overview"),
       adminFetch<{ users: AdminUser[] }>("/api/admin/users"),
@@ -183,7 +357,33 @@ export default function AdminPortalPage() {
     setOrders(ordersRes.orders || [])
     setPayments(paymentsRes.payments || [])
     setPayoutRequests(payoutsRes.requests || [])
+    setLastSyncedAt(new Date())
   }, [adminFetch])
+
+  const refreshAll = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setMessage("")
+        setError("")
+      }
+
+      setRefreshing(true)
+
+      try {
+        await loadAll()
+        if (!silent) {
+          setMessage("Admin data synced successfully")
+        }
+      } catch (caughtError) {
+        if (!silent) {
+          setError(getErrorMessage(caughtError))
+        }
+      } finally {
+        setRefreshing(false)
+      }
+    },
+    [loadAll]
+  )
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -192,10 +392,12 @@ export default function AdminPortalPage() {
         return
       }
 
+      setAdminEmail(user.email || "")
+
       try {
         await loadAll()
-      } catch (err: unknown) {
-        setError(getErrorMessage(err))
+      } catch (caughtError) {
+        setError(getErrorMessage(caughtError))
       } finally {
         setLoading(false)
       }
@@ -204,17 +406,46 @@ export default function AdminPortalPage() {
     return () => unsubscribe()
   }, [loadAll])
 
+  useEffect(() => {
+    if (!autoRefresh) return
+
+    const interval = setInterval(() => {
+      refreshAll(true).catch(() => {})
+    }, 60000)
+
+    return () => clearInterval(interval)
+  }, [autoRefresh, refreshAll])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const logout = async () => {
+    await signOut(auth)
+    window.location.href = "/admin/login"
+  }
+
   const runUserAction = async (firebaseUID: string, action: string, role?: string) => {
     try {
       setBusyAction(`${action}-${firebaseUID}`)
+      setError("")
       await adminFetch<{ success: boolean }>("/api/admin/user-action", {
         method: "POST",
         body: JSON.stringify({ firebaseUID, action, role })
       })
+
       await loadAll()
       setMessage("User updated successfully")
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError))
     } finally {
       setBusyAction("")
     }
@@ -223,14 +454,15 @@ export default function AdminPortalPage() {
   const runSupplierAction = async (firebaseUID: string, action: string) => {
     try {
       setBusyAction(`${action}-${firebaseUID}`)
+      setError("")
       await adminFetch<{ success: boolean }>("/api/admin/supplier-action", {
         method: "POST",
         body: JSON.stringify({ firebaseUID, action })
       })
       await loadAll()
       setMessage("Supplier updated successfully")
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError))
     } finally {
       setBusyAction("")
     }
@@ -239,14 +471,22 @@ export default function AdminPortalPage() {
   const runPayoutAction = async (requestId: string, action: "approve" | "reject") => {
     try {
       setBusyAction(`${action}-${requestId}`)
+      setError("")
+
       await adminFetch<{ success: boolean }>("/api/admin/payout-requests", {
         method: "POST",
-        body: JSON.stringify({ requestId, action })
+        body: JSON.stringify({
+          requestId,
+          action,
+          note: payoutNotes[requestId] || ""
+        })
       })
+
       await loadAll()
       setMessage(`Payout request ${action}d successfully`)
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
+      setPayoutNotes((prev) => ({ ...prev, [requestId]: "" }))
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError))
     } finally {
       setBusyAction("")
     }
@@ -255,6 +495,8 @@ export default function AdminPortalPage() {
   const clearDatabase = async () => {
     try {
       setBusyAction("clear-db")
+      setError("")
+
       const data = await adminFetch<ClearDbResponse>("/api/admin/database/clear", {
         method: "POST",
         body: JSON.stringify({
@@ -269,32 +511,396 @@ export default function AdminPortalPage() {
       setConfirmPhrase("")
       setConfirmOwnerEmail("")
       await loadAll()
-    } catch (err: unknown) {
-      setError(getErrorMessage(err))
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError))
     } finally {
       setBusyAction("")
     }
   }
 
+  const orderById = useMemo(() => {
+    const map = new Map<string, AdminOrder>()
+    orders.forEach((order) => {
+      map.set(String(order._id), order)
+    })
+    return map
+  }, [orders])
+
+  const userOrdersMap = useMemo(() => {
+    const map = new Map<string, AdminOrder[]>()
+    orders.forEach((order) => {
+      const key = String(order.userUID || "")
+      if (!key) return
+      const current = map.get(key) || []
+      current.push(order)
+      map.set(key, current)
+    })
+    return map
+  }, [orders])
+
+  const supplierOrdersMap = useMemo(() => {
+    const map = new Map<string, AdminOrder[]>()
+    orders.forEach((order) => {
+      const key = String(order.supplierUID || "")
+      if (!key) return
+      const current = map.get(key) || []
+      current.push(order)
+      map.set(key, current)
+    })
+    return map
+  }, [orders])
+
+  const pendingPayoutAmount = useMemo(
+    () => payoutRequests.filter((request) => request.status === "pending").reduce((sum, request) => sum + Number(request.amount || 0), 0),
+    [payoutRequests]
+  )
+
+  const staleOrders = useMemo(() => {
+    const now = Date.now()
+    return orders.filter((order) => {
+      if (["delivered", "cancelled"].includes(order.status)) return false
+      const createdAt = new Date(order.createdAt).getTime()
+      if (Number.isNaN(createdAt)) return false
+      const hours = (now - createdAt) / (1000 * 60 * 60)
+      return hours >= 24
+    })
+  }, [orders])
+
+  const unassignedOrders = useMemo(
+    () => orders.filter((order) => !order.supplierUID && order.status === "pending"),
+    [orders]
+  )
+
+  const inactiveUsers = useMemo(() => users.filter((user) => user.active === false), [users])
+  const inactiveSuppliers = useMemo(() => suppliers.filter((supplier) => supplier.active === false), [suppliers])
+
+  const alerts = useMemo(() => {
+    return [
+      {
+        label: "Stale Orders (>24h)",
+        value: staleOrders.length,
+        severity: staleOrders.length > 0 ? "warning" : "ok"
+      },
+      {
+        label: "Unassigned Pending Orders",
+        value: unassignedOrders.length,
+        severity: unassignedOrders.length > 0 ? "warning" : "ok"
+      },
+      {
+        label: "Pending Payout Queue",
+        value: payoutRequests.filter((request) => request.status === "pending").length,
+        severity: payoutRequests.some((request) => request.status === "pending") ? "warning" : "ok"
+      },
+      {
+        label: "Inactive Accounts",
+        value: inactiveUsers.length + inactiveSuppliers.length,
+        severity: inactiveUsers.length + inactiveSuppliers.length > 0 ? "attention" : "ok"
+      }
+    ]
+  }, [inactiveSuppliers.length, inactiveUsers.length, payoutRequests, staleOrders.length, unassignedOrders.length])
+
+  const queueBoard = useMemo(() => {
+    const buckets: Record<string, number> = {
+      pending: 0,
+      accepted: 0,
+      awaiting_payment: 0,
+      printing: 0,
+      printed: 0,
+      delivered: 0,
+      cancelled: 0
+    }
+
+    orders.forEach((order) => {
+      if (buckets[order.status] !== undefined) {
+        buckets[order.status] += 1
+      }
+    })
+
+    return Object.entries(buckets).map(([key, value]) => ({
+      key,
+      label: formatStatus(key),
+      value
+    }))
+  }, [orders])
+
+  const spotlightResults = useMemo(() => {
+    const query = spotlightQuery.trim().toLowerCase()
+    if (!query || query.length < 2) return [] as SpotlightResult[]
+
+    const userHits = users
+      .filter((user) =>
+        hasQueryMatch(query, [user.name, user.email, user.firebaseUID, user.phone, user.rollNo, user.branch, user.section])
+      )
+      .slice(0, 3)
+      .map((user) => ({
+        key: `user-${user.firebaseUID || user._id}`,
+        kind: "user" as const,
+        title: user.name || "Unknown user",
+        subtitle: user.email || String(user.firebaseUID || "-"),
+        meta: `Role ${user.role}`
+      }))
+
+    const supplierHits = suppliers
+      .filter((supplier) =>
+        hasQueryMatch(query, [supplier.name, supplier.email, supplier.firebaseUID, supplier.phone, supplier.rollNo, supplier.branch])
+      )
+      .slice(0, 3)
+      .map((supplier) => ({
+        key: `supplier-${supplier.firebaseUID || supplier._id}`,
+        kind: "supplier" as const,
+        title: supplier.name || "Unknown supplier",
+        subtitle: supplier.email || String(supplier.firebaseUID || "-"),
+        meta: supplier.approved ? "Approved" : "Pending approval"
+      }))
+
+    const orderHits = orders
+      .filter((order) =>
+        hasQueryMatch(query, [
+          order._id,
+          order.user?.name,
+          order.user?.email,
+          order.supplier?.name,
+          order.status,
+          order.paymentStatus
+        ])
+      )
+      .slice(0, 4)
+      .map((order) => ({
+        key: `order-${order._id}`,
+        kind: "order" as const,
+        title: `Order ${String(order._id).slice(-8)}`,
+        subtitle: `${order.user?.name || "Unknown"} • ${formatStatus(order.status)}`,
+        meta: formatCurrency(order.finalPrice ?? order.estimatedPrice)
+      }))
+
+    const paymentHits = payments
+      .filter((payment) =>
+        hasQueryMatch(query, [payment.orderId, payment.user?.name, payment.user?.email, payment.razorpayPaymentId, payment.paymentStatus])
+      )
+      .slice(0, 2)
+      .map((payment) => ({
+        key: `payment-${payment.orderId}`,
+        kind: "payment" as const,
+        title: `Payment ${String(payment.orderId).slice(-8)}`,
+        subtitle: payment.user?.name || payment.user?.email || payment.userUID,
+        meta: `${formatCurrency(payment.amount)} • ${formatStatus(payment.paymentStatus)}`
+      }))
+
+    const payoutHits = payoutRequests
+      .filter((request) =>
+        hasQueryMatch(query, [request._id, request.supplier?.name, request.supplier?.email, request.supplierUID, request.status])
+      )
+      .slice(0, 2)
+      .map((request) => ({
+        key: `payout-${request._id}`,
+        kind: "payout" as const,
+        title: `Payout ${String(request._id).slice(-8)}`,
+        subtitle: request.supplier?.name || request.supplierUID,
+        meta: `${formatCurrency(request.amount)} • ${formatStatus(request.status)}`
+      }))
+
+    return [...userHits, ...supplierHits, ...orderHits, ...paymentHits, ...payoutHits]
+  }, [orders, payments, payoutRequests, spotlightQuery, suppliers, users])
+
+  const filteredUsers = useMemo(() => {
+    const query = userQuery.trim().toLowerCase()
+
+    return users.filter((user) => {
+      if (userRoleFilter !== "ALL" && user.role !== userRoleFilter) return false
+
+      if (userApprovalFilter === "APPROVED" && user.approved !== true) return false
+      if (userApprovalFilter === "PENDING" && user.approved !== false) return false
+
+      if (userActivityFilter === "ACTIVE" && user.active !== true) return false
+      if (userActivityFilter === "INACTIVE" && user.active !== false) return false
+
+      return hasQueryMatch(query, [
+        user.name,
+        user.email,
+        user.firebaseUID,
+        user.phone,
+        user.rollNo,
+        user.branch,
+        user.section,
+        user.role
+      ])
+    })
+  }, [userQuery, userRoleFilter, userApprovalFilter, userActivityFilter, users])
+
+  const filteredSuppliers = useMemo(() => {
+    const query = supplierQuery.trim().toLowerCase()
+
+    return suppliers.filter((supplier) => {
+      if (supplierApprovalFilter === "APPROVED" && supplier.approved !== true) return false
+      if (supplierApprovalFilter === "PENDING" && supplier.approved !== false) return false
+
+      if (supplierActivityFilter === "ACTIVE" && supplier.active !== true) return false
+      if (supplierActivityFilter === "INACTIVE" && supplier.active !== false) return false
+
+      return hasQueryMatch(query, [
+        supplier.name,
+        supplier.email,
+        supplier.firebaseUID,
+        supplier.phone,
+        supplier.rollNo,
+        supplier.branch,
+        supplier.year
+      ])
+    })
+  }, [supplierActivityFilter, supplierApprovalFilter, supplierQuery, suppliers])
+
+  const filteredOrders = useMemo(() => {
+    const query = orderQuery.trim().toLowerCase()
+
+    return orders.filter((order) => {
+      if (orderStatusFilter !== "ALL" && order.status !== orderStatusFilter) return false
+      if (orderPaymentFilter !== "ALL" && order.paymentStatus !== orderPaymentFilter) return false
+
+      if (orderAssignmentFilter === "assigned" && !order.supplierUID) return false
+      if (orderAssignmentFilter === "unassigned" && order.supplierUID) return false
+
+      return hasQueryMatch(query, [
+        order._id,
+        order.user?.name,
+        order.user?.email,
+        order.userUID,
+        order.supplier?.name,
+        order.supplierUID,
+        order.status,
+        order.paymentStatus,
+        order.requestType,
+        order.printType
+      ])
+    })
+  }, [orderAssignmentFilter, orderPaymentFilter, orderQuery, orderStatusFilter, orders])
+
+  const filteredPayments = useMemo(() => {
+    const query = paymentQuery.trim().toLowerCase()
+
+    return payments.filter((payment) => {
+      if (paymentStatusFilter !== "ALL" && payment.paymentStatus !== paymentStatusFilter) return false
+
+      return hasQueryMatch(query, [
+        payment.orderId,
+        payment.user?.name,
+        payment.user?.email,
+        payment.userUID,
+        payment.paymentStatus,
+        payment.razorpayPaymentId,
+        payment.razorpayOrderId
+      ])
+    })
+  }, [paymentQuery, paymentStatusFilter, payments])
+
+  const filteredPayouts = useMemo(() => {
+    const query = payoutQuery.trim().toLowerCase()
+
+    return payoutRequests.filter((request) => {
+      if (payoutStatusFilter !== "ALL" && request.status !== payoutStatusFilter) return false
+
+      return hasQueryMatch(query, [
+        request._id,
+        request.supplierUID,
+        request.supplier?.name,
+        request.supplier?.email,
+        request.status,
+        request.amount
+      ])
+    })
+  }, [payoutQuery, payoutRequests, payoutStatusFilter])
+
+  const userPanelMetrics = useMemo(() => {
+    if (!selectedUser?.firebaseUID) return null
+
+    const relatedOrders = userOrdersMap.get(String(selectedUser.firebaseUID)) || []
+    const paidOrders = relatedOrders.filter((order) => order.paymentStatus === "paid")
+
+    return {
+      orderCount: relatedOrders.length,
+      paidCount: paidOrders.length,
+      spend: relatedOrders.reduce(
+        (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
+        0
+      ),
+      latestOrder: relatedOrders[0] || null
+    }
+  }, [selectedUser, userOrdersMap])
+
+  const supplierPanelMetrics = useMemo(() => {
+    if (!selectedSupplier?.firebaseUID) return null
+
+    const relatedOrders = supplierOrdersMap.get(String(selectedSupplier.firebaseUID)) || []
+
+    return {
+      orderCount: relatedOrders.length,
+      deliveredCount: relatedOrders.filter((order) => order.status === "delivered").length,
+      paidCount: relatedOrders.filter((order) => order.paymentStatus === "paid").length,
+      activeOrders: relatedOrders.filter((order) => !["delivered", "cancelled"].includes(order.status)).length,
+      latestOrder: relatedOrders[0] || null
+    }
+  }, [selectedSupplier, supplierOrdersMap])
+
   const topCards = useMemo(() => {
     if (!overview) return []
-    return [
-      { label: "Users", value: overview.stats.totalUsers },
-      { label: "Suppliers", value: overview.stats.totalSuppliers },
-      { label: "Orders", value: overview.stats.totalOrders },
-      { label: "Revenue", value: `INR ${overview.stats.totalRevenue}` },
-      { label: "Paid Orders", value: overview.stats.paidOrders },
-      { label: "Pending Orders", value: overview.stats.pendingOrders }
-    ]
-  }, [overview])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <p>Loading secure admin portal...</p>
-      </div>
-    )
-  }
+    return [
+      {
+        label: "Total Users",
+        value: overview.stats.totalUsers,
+        meta: `${overview.stats.activeUsers} active`,
+        icon: <Users className="w-4 h-4" />
+      },
+      {
+        label: "Suppliers",
+        value: overview.stats.totalSuppliers,
+        meta: `${overview.stats.approvedSuppliers} approved`,
+        icon: <Store className="w-4 h-4" />
+      },
+      {
+        label: "Orders",
+        value: overview.stats.totalOrders,
+        meta: `${overview.stats.pendingOrders} in progress`,
+        icon: <Activity className="w-4 h-4" />
+      },
+      {
+        label: "Collected Revenue",
+        value: formatCurrency(overview.stats.totalRevenue),
+        meta: `${overview.stats.paidOrders} paid orders`,
+        icon: <CreditCard className="w-4 h-4" />
+      },
+      {
+        label: "Pending Payout Amount",
+        value: formatCurrency(pendingPayoutAmount),
+        meta: `${payoutRequests.filter((request) => request.status === "pending").length} requests`,
+        icon: <Wallet className="w-4 h-4" />
+      },
+      {
+        label: "Stale Orders",
+        value: staleOrders.length,
+        meta: "Older than 24 hours",
+        icon: <AlertTriangle className="w-4 h-4" />
+      }
+    ]
+  }, [overview, payoutRequests, pendingPayoutAmount, staleOrders.length])
+
+  const recentActivity = useMemo(() => {
+    const items = [
+      ...orders.slice(0, 6).map((order) => ({
+        id: `order-${order._id}`,
+        title: `Order ${String(order._id).slice(-8)} moved to ${formatStatus(order.status)}`,
+        subtitle: `${order.user?.name || order.userUID} • ${formatDateTime(order.createdAt)}`,
+        level: order.status === "cancelled" ? "risk" : "neutral"
+      })),
+      ...payments.slice(0, 3).map((payment) => ({
+        id: `payment-${payment.orderId}`,
+        title: `Payment ${formatStatus(payment.paymentStatus)} for ${String(payment.orderId).slice(-8)}`,
+        subtitle: `${formatCurrency(payment.amount)} • ${formatDateTime(payment.paidAt || payment.createdAt || "")}`,
+        level: payment.paymentStatus === "paid" ? "good" : "neutral"
+      }))
+    ]
+
+    return items.slice(0, 8)
+  }, [orders, payments])
 
   const tabs: Array<{ value: Tab; label: string }> = [
     { value: "overview", label: "Overview" },
@@ -302,39 +908,238 @@ export default function AdminPortalPage() {
     { value: "suppliers", label: "Suppliers" },
     { value: "orders", label: "Orders" },
     { value: "payments", label: "Payments" },
-    { value: "payouts", label: "Payout Requests" },
-    { value: "danger", label: "Danger Zone" }
+    { value: "payouts", label: "Payouts" },
+    { value: "danger", label: "Danger" }
   ]
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-white flex items-center justify-center px-4">
+        <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/10 border border-gray-200 dark:border-white/20 rounded-3xl px-8 py-6 text-center">
+          <p className="text-xs uppercase tracking-[0.22em] text-indigo-500 dark:text-cyan-300">Admin Boot Sequence</p>
+          <p className="mt-2">Loading secure command center...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <RoleGuard role="ADMIN">
-      <div className="min-h-screen bg-slate-950 text-slate-100">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-cyan-400 text-xs uppercase tracking-[0.25em]">Owner Control Center</p>
-              <h1 className="text-3xl font-bold">Admin Portal</h1>
-            </div>
+    <main className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
+      <CursorDepth />
+
+      <div className="h-28 md:h-32" />
+
+      <div className="w-full flex justify-center fixed top-6 z-50">
+        <nav className="flex items-center justify-between px-6 md:px-12 py-4 w-[95%] max-w-[1450px] rounded-3xl backdrop-blur-3xl bg-white/70 dark:bg-black/40 border border-gray-200 dark:border-white/20 shadow-[0_8px_40px_rgba(0,0,0,0.2)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.4)]">
+          <h1
+            className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent cursor-pointer"
+            onClick={() => router.push("/")}
+          >
+            PrintMyPage
+          </h1>
+
+          <div className="hidden lg:flex items-center gap-3">
             <button
-              onClick={loadAll}
-              className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700"
+              onClick={() => setActiveTab("overview")}
+              className="group relative flex items-center gap-2 px-4 py-2 rounded-full border border-gray-300 dark:border-white/20 bg-white/80 dark:bg-white/5 backdrop-blur-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10"
             >
-              Refresh Data
+              <Wrench className="w-4 h-4" />
+              Control Hub
+            </button>
+            <button
+              onClick={() => refreshAll(false)}
+              className="group relative flex items-center gap-2 px-4 py-2 rounded-full border border-gray-300 dark:border-white/20 bg-white/80 dark:bg-white/5 backdrop-blur-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10"
+              disabled={refreshing}
+            >
+              <RefreshCcw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Syncing" : "Refresh"}
             </button>
           </div>
 
-          {error ? <p className="text-red-400 text-sm">{error}</p> : null}
-          {message ? <p className="text-emerald-400 text-sm">{message}</p> : null}
+          <div className="flex items-center gap-4">
+            <label className="hidden md:flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <span>Auto Sync</span>
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(event) => setAutoRefresh(event.target.checked)}
+                className="accent-indigo-500"
+              />
+            </label>
+
+            <CandleThemeToggle />
+
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setMenuOpen((prev) => !prev)}
+                className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-black font-semibold"
+              >
+                {String(adminEmail || "A").charAt(0).toUpperCase()}
+              </button>
+
+              {menuOpen ? (
+                <div className="absolute right-0 mt-3 w-72 backdrop-blur-2xl bg-white/80 dark:bg-black/60 border border-gray-200 dark:border-white/10 rounded-2xl p-4 space-y-3">
+                  <p className="text-sm break-all border-b border-gray-200 dark:border-white/10 pb-2">
+                    {adminEmail || "Admin"}
+                  </p>
+
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      router.push("/")
+                    }}
+                    className="w-full text-left text-sm hover:text-indigo-500"
+                  >
+                    Open Landing Page
+                  </button>
+
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 text-left text-rose-500 hover:text-rose-400 text-sm"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </nav>
+      </div>
+
+      <section className="relative pt-6 pb-16 px-4 md:px-8">
+        <HeroBackground />
+
+        <div className="relative max-w-[1450px] mx-auto space-y-6">
+          <div className="grid lg:grid-cols-[1.2fr_0.8fr] gap-4">
+            <div
+              className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-6 md:p-8"
+              data-depth="22"
+            >
+              <p className="text-xs uppercase tracking-[0.24em] text-indigo-500 dark:text-cyan-300">
+                Technician Control Layer
+              </p>
+              <h2 className="text-3xl md:text-4xl font-bold mt-3">
+                Admin Command Center
+              </h2>
+              <p className="mt-3 text-gray-600 dark:text-gray-300 max-w-2xl">
+                Monitor live platform health, inspect users and suppliers, handle payout operations, and manage lifecycle risks from one unified console.
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-3 text-sm">
+                <span className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5">
+                  Last Sync: {lastSyncedAt ? lastSyncedAt.toLocaleTimeString() : "-"}
+                </span>
+                <span className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5">
+                  {autoRefresh ? "Auto sync every 60s" : "Manual sync mode"}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-6 space-y-4"
+              data-depth="38"
+            >
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <Search className="w-4 h-4" />
+                Global Spotlight Search
+              </p>
+
+              <div className="relative">
+                <input
+                  value={spotlightQuery}
+                  onChange={(event) => setSpotlightQuery(event.target.value)}
+                  placeholder="Search user, supplier, order id, payment id..."
+                  className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                />
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {spotlightResults.length > 0 ? (
+                  spotlightResults.map((result) => (
+                    <button
+                      key={result.key}
+                      className="w-full text-left px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                      onClick={() => {
+                        if (result.kind === "user") {
+                          const picked = users.find((user) => {
+                            const id = user.firebaseUID || user._id
+                            return result.key === `user-${id}`
+                          })
+                          if (picked) {
+                            setActiveTab("users")
+                            setSelectedUser(picked)
+                          }
+                          return
+                        }
+
+                        if (result.kind === "supplier") {
+                          const picked = suppliers.find((supplier) => {
+                            const id = supplier.firebaseUID || supplier._id
+                            return result.key === `supplier-${id}`
+                          })
+                          if (picked) {
+                            setActiveTab("suppliers")
+                            setSelectedSupplier(picked)
+                          }
+                          return
+                        }
+
+                        if (result.kind === "order") {
+                          const orderId = result.key.replace("order-", "")
+                          const picked = orderById.get(orderId)
+                          if (picked) {
+                            setActiveTab("orders")
+                            setSelectedOrder(picked)
+                          }
+                          return
+                        }
+
+                        if (result.kind === "payment") {
+                          setActiveTab("payments")
+                          setPaymentQuery(result.key.replace("payment-", ""))
+                          return
+                        }
+
+                        setActiveTab("payouts")
+                        setPayoutQuery(result.key.replace("payout-", ""))
+                      }}
+                    >
+                      <p className="text-sm font-medium">{result.title}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300">{result.subtitle}</p>
+                      <p className="text-[11px] text-indigo-500 dark:text-cyan-300 mt-1">{result.meta}</p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {spotlightQuery.length < 2 ? "Type at least 2 characters to search." : "No matches found."}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="px-4 py-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-300 text-sm">
+              {error}
+            </div>
+          ) : null}
+
+          {message ? (
+            <div className="px-4 py-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 text-sm">
+              {message}
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap gap-2">
             {tabs.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
-                className={`px-4 py-2 rounded-lg border ${
+                className={`px-4 py-2 rounded-full border transition text-sm ${
                   activeTab === tab.value
-                    ? "bg-cyan-400 text-slate-900 border-cyan-300"
-                    : "bg-slate-900 border-slate-700"
+                    ? "bg-gradient-to-r from-indigo-500 to-cyan-500 text-white border-transparent"
+                    : "bg-white/70 dark:bg-white/5 border-gray-200 dark:border-white/20 hover:bg-gray-100 dark:hover:bg-white/10"
                 }`}
               >
                 {tab.label}
@@ -344,392 +1149,1222 @@ export default function AdminPortalPage() {
 
           {activeTab === "overview" && overview ? (
             <div className="space-y-6">
-              <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 {topCards.map((card) => (
-                  <div key={card.label} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-                    <p className="text-xs text-slate-400">{card.label}</p>
-                    <h2 className="text-xl font-semibold mt-1">{card.value}</h2>
+                  <div
+                    key={card.label}
+                    className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-[0.14em] text-gray-500 dark:text-gray-400">{card.label}</p>
+                      <span className="w-8 h-8 rounded-full bg-indigo-500/15 text-indigo-500 dark:text-cyan-300 flex items-center justify-center">
+                        {card.icon}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-semibold mt-3">{card.value}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{card.meta}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="grid lg:grid-cols-2 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 h-[320px]">
-                  <h3 className="font-semibold mb-3">Daily Order Trend</h3>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={overview.charts.orderTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="date" stroke="#94a3b8" hide={overview.charts.orderTrend.length > 12} />
-                      <YAxis stroke="#94a3b8" />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="orders" stroke="#22d3ee" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
+              <div className="grid xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2 backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5">
+                  <h3 className="text-lg font-semibold mb-4">Order Throughput</h3>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={overview.charts.orderTrend}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#64748b33" />
+                        <XAxis dataKey="date" stroke="#94a3b8" hide={overview.charts.orderTrend.length > 12} />
+                        <YAxis stroke="#94a3b8" />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="orders" stroke="#6366f1" strokeWidth={2.5} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 h-[320px]">
-                  <h3 className="font-semibold mb-3">Daily Payment Revenue</h3>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={overview.charts.paymentTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="date" stroke="#94a3b8" hide={overview.charts.paymentTrend.length > 12} />
-                      <YAxis stroke="#94a3b8" />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="amount" fill="#34d399" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5">
+                  <h3 className="text-lg font-semibold mb-4">Risk Monitor</h3>
+                  <div className="space-y-3">
+                    {alerts.map((alert) => (
+                      <div
+                        key={alert.label}
+                        className={`rounded-2xl border px-4 py-3 ${
+                          alert.severity === "ok"
+                            ? "border-emerald-500/30 bg-emerald-500/10"
+                            : alert.severity === "attention"
+                              ? "border-cyan-500/30 bg-cyan-500/10"
+                              : "border-amber-500/30 bg-amber-500/10"
+                        }`}
+                      >
+                        <p className="text-sm font-medium">{alert.label}</p>
+                        <p className="text-xl font-semibold mt-1">{alert.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 h-[360px]">
-                <h3 className="font-semibold mb-3">Order Status Distribution</h3>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={overview.charts.statusBreakdown}
-                      dataKey="count"
-                      nameKey="status"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={120}
-                      label
+              <div className="grid xl:grid-cols-3 gap-4">
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5 h-[360px]">
+                  <h3 className="text-lg font-semibold mb-4">Revenue Trend</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={overview.charts.paymentTrend}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#64748b33" />
+                      <XAxis dataKey="date" stroke="#94a3b8" hide={overview.charts.paymentTrend.length > 12} />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip />
+                      <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5 h-[360px]">
+                  <h3 className="text-lg font-semibold mb-4">Status Distribution</h3>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={overview.charts.statusBreakdown}
+                        dataKey="count"
+                        nameKey="status"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={110}
+                        label
+                      >
+                        {overview.charts.statusBreakdown.map((entry, index) => (
+                          <Cell key={`${entry.status}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5">
+                  <h3 className="text-lg font-semibold mb-4">Queue Board</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {queueBoard.map((item) => (
+                      <div key={item.key} className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
+                        <p className="text-2xl font-semibold mt-1">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-lg font-semibold">Recent Platform Activity</h3>
+                  <button
+                    onClick={() => refreshAll(false)}
+                    className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 text-sm"
+                  >
+                    Refresh Feed
+                  </button>
+                </div>
+
+                <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {recentActivity.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl border p-3 ${
+                        item.level === "good"
+                          ? "border-emerald-500/30 bg-emerald-500/10"
+                          : item.level === "risk"
+                            ? "border-rose-500/30 bg-rose-500/10"
+                            : "border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5"
+                      }`}
                     >
-                      {overview.charts.statusBreakdown.map((entry, index) => (
-                        <Cell key={`${entry.status}-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                      <p className="text-sm font-medium">{item.title}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{item.subtitle}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : null}
 
           {activeTab === "users" ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    <th className="text-left p-3">Name</th>
-                    <th className="text-left p-3">Email</th>
-                    <th className="text-left p-3">Role</th>
-                    <th className="text-left p-3">Approved</th>
-                    <th className="text-left p-3">Active</th>
-                    <th className="text-left p-3">Orders</th>
-                    <th className="text-left p-3">Spent</th>
-                    <th className="text-left p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((user, idx) => (
-                    <tr key={user.firebaseUID || user._id || `user-${idx}`} className="border-t border-slate-800">
-                      <td className="p-3">{user.name || "-"}</td>
-                      <td className="p-3">{user.email || "-"}</td>
-                      <td className="p-3">{user.role}</td>
-                      <td className="p-3">{user.approved ? "Yes" : "No"}</td>
-                      <td className="p-3">{user.active ? "Yes" : "No"}</td>
-                      <td className="p-3">{user.orderCount || 0}</td>
-                      <td className="p-3">INR {user.totalSpent || 0}</td>
-                      <td className="p-3">
-                        {user.firebaseUID ? (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              disabled={busyAction === `activate-${user.firebaseUID}`}
-                              onClick={() => runUserAction(user.firebaseUID!, "activate")}
-                              className="px-2 py-1 rounded bg-emerald-700"
-                            >
-                              Unsuspend
-                            </button>
-                            <button
-                              disabled={busyAction === `deactivate-${user.firebaseUID}`}
-                              onClick={() => runUserAction(user.firebaseUID!, "deactivate")}
-                              className="px-2 py-1 rounded bg-amber-600"
-                            >
-                              Suspend
-                            </button>
-                            <button
-                              disabled={busyAction === `approve-${user.firebaseUID}`}
-                              onClick={() => runUserAction(user.firebaseUID!, "approve")}
-                              className="px-2 py-1 rounded bg-cyan-700"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              disabled={busyAction === `disapprove-${user.firebaseUID}`}
-                              onClick={() => runUserAction(user.firebaseUID!, "disapprove")}
-                              className="px-2 py-1 rounded bg-rose-700"
-                            >
-                              Disapprove
-                            </button>
-                            <select
-                              value={user.role}
-                              onChange={(e) => runUserAction(user.firebaseUID!, "set_role", e.target.value)}
-                              className="px-2 py-1 rounded bg-slate-800 border border-slate-700"
-                            >
-                              <option value="USER">USER</option>
-                              <option value="SUPPLIER">SUPPLIER</option>
-                              <option value="ADMIN">ADMIN</option>
-                            </select>
-                            <button
-                              disabled={busyAction === `delete-${user.firebaseUID}`}
-                              onClick={() => runUserAction(user.firebaseUID!, "delete")}
-                              className="px-2 py-1 rounded bg-red-700"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
+            <div className="space-y-4">
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    value={userQuery}
+                    onChange={(event) => setUserQuery(event.target.value)}
+                    placeholder="Search users by name, email, UID, branch..."
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                  />
+                </div>
+
+                <select
+                  value={userRoleFilter}
+                  onChange={(event) => setUserRoleFilter(event.target.value as "ALL" | UserRole)}
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Roles</option>
+                  <option value="USER">User</option>
+                  <option value="SUPPLIER">Supplier</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+
+                <select
+                  value={userApprovalFilter}
+                  onChange={(event) =>
+                    setUserApprovalFilter(event.target.value as "ALL" | "APPROVED" | "PENDING")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Approval</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="PENDING">Pending</option>
+                </select>
+
+                <select
+                  value={userActivityFilter}
+                  onChange={(event) =>
+                    setUserActivityFilter(event.target.value as "ALL" | "ACTIVE" | "INACTIVE")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Activity</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      "admin-users.csv",
+                      filteredUsers.map((user) => ({
+                        name: user.name || "",
+                        email: user.email || "",
+                        firebaseUID: user.firebaseUID || "",
+                        role: user.role,
+                        approved: user.approved,
+                        active: user.active,
+                        orderCount: user.orderCount || 0,
+                        paidCount: user.paidCount || 0,
+                        totalSpent: user.totalSpent || 0,
+                        createdAt: formatDateTime(user.createdAt || "")
+                      }))
+                    )
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl overflow-x-auto">
+                <table className="w-full min-w-[1300px] text-sm">
+                  <thead className="bg-gray-100/80 dark:bg-white/5">
+                    <tr>
+                      <th className="text-left p-3">User</th>
+                      <th className="text-left p-3">Role</th>
+                      <th className="text-left p-3">Status</th>
+                      <th className="text-left p-3">Orders</th>
+                      <th className="text-left p-3">Spent</th>
+                      <th className="text-left p-3">Created</th>
+                      <th className="text-left p-3">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user, index) => (
+                      <tr key={user.firebaseUID || user._id || `user-${index}`} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="p-3">
+                          <p className="font-medium">{user.name || "-"}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 break-all">{user.email || user.firebaseUID || "-"}</p>
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-1 rounded-full text-xs border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5">
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(user.approved ? "approved" : "pending")}`}>
+                              {user.approved ? "Approved" : "Pending"}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(user.active ? "active" : "inactive")}`}>
+                              {user.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">{user.orderCount || 0}</td>
+                        <td className="p-3">{formatCurrency(user.totalSpent)}</td>
+                        <td className="p-3">{formatDateTime(user.createdAt || "")}</td>
+                        <td className="p-3">
+                          {user.firebaseUID ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => setSelectedUser(user)}
+                                className="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View
+                              </button>
+
+                              <button
+                                disabled={busyAction === `activate-${user.firebaseUID}`}
+                                onClick={() => runUserAction(user.firebaseUID!, "activate")}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/80 text-white"
+                              >
+                                Unsuspend
+                              </button>
+
+                              <button
+                                disabled={busyAction === `deactivate-${user.firebaseUID}`}
+                                onClick={() => runUserAction(user.firebaseUID!, "deactivate")}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/80 text-white"
+                              >
+                                Suspend
+                              </button>
+
+                              <select
+                                value={user.role}
+                                onChange={(event) => runUserAction(user.firebaseUID!, "set_role", event.target.value)}
+                                className="px-2 py-1 rounded-lg bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                              >
+                                <option value="USER">USER</option>
+                                <option value="SUPPLIER">SUPPLIER</option>
+                                <option value="ADMIN">ADMIN</option>
+                              </select>
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
           {activeTab === "suppliers" ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[1800px] text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    <th className="text-left p-3">Name</th>
-                    <th className="text-left p-3">Email</th>
-                    <th className="text-left p-3">Approved</th>
-                    <th className="text-left p-3">Active</th>
-                    <th className="text-left p-3">Orders</th>
-                    <th className="text-left p-3">Paid Orders</th>
-                    <th className="text-left p-3">Gross Delivered</th>
-                    <th className="text-left p-3">Razorpay Fees</th>
-                    <th className="text-left p-3">GST on Fees</th>
-                    <th className="text-left p-3">Net Revenue</th>
-                    <th className="text-left p-3">Claimed</th>
-                    <th className="text-left p-3">Pending Req</th>
-                    <th className="text-left p-3">Wallet</th>
-                    <th className="text-left p-3">Available</th>
-                    <th className="text-left p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {suppliers.map((supplier, idx) => (
-                    <tr key={supplier.firebaseUID || supplier._id || `sup-${idx}`} className="border-t border-slate-800">
-                      <td className="p-3">{supplier.name || "-"}</td>
-                      <td className="p-3">{supplier.email || "-"}</td>
-                      <td className="p-3">{supplier.approved ? "Yes" : "No"}</td>
-                      <td className="p-3">{supplier.active ? "Yes" : "No"}</td>
-                      <td className="p-3">{supplier.ordersHandled || 0}</td>
-                      <td className="p-3">{supplier.paidOrders || 0}</td>
-                      <td className="p-3">INR {supplier.grossDeliveredRevenue || 0}</td>
-                      <td className="p-3">INR {supplier.razorpayFees || 0}</td>
-                      <td className="p-3">INR {supplier.gstOnFees || 0}</td>
-                      <td className="p-3">INR {supplier.netRevenue || 0}</td>
-                      <td className="p-3">INR {supplier.totalClaimed || 0}</td>
-                      <td className="p-3">INR {supplier.pendingRequested || 0}</td>
-                      <td className="p-3">INR {supplier.walletBalance || 0}</td>
-                      <td className="p-3">INR {supplier.availableToClaim || 0}</td>
-                      <td className="p-3">
-                        {supplier.firebaseUID ? (
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              disabled={busyAction === `approve-${supplier.firebaseUID}`}
-                              onClick={() => runSupplierAction(supplier.firebaseUID!, "approve")}
-                              className="px-2 py-1 rounded bg-cyan-700"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              disabled={busyAction === `disapprove-${supplier.firebaseUID}`}
-                              onClick={() => runSupplierAction(supplier.firebaseUID!, "disapprove")}
-                              className="px-2 py-1 rounded bg-rose-700"
-                            >
-                              Disapprove
-                            </button>
-                            <button
-                              disabled={busyAction === `activate-${supplier.firebaseUID}`}
-                              onClick={() => runSupplierAction(supplier.firebaseUID!, "activate")}
-                              className="px-2 py-1 rounded bg-emerald-700"
-                            >
-                              Activate
-                            </button>
-                            <button
-                              disabled={busyAction === `deactivate-${supplier.firebaseUID}`}
-                              onClick={() => runSupplierAction(supplier.firebaseUID!, "deactivate")}
-                              className="px-2 py-1 rounded bg-amber-600"
-                            >
-                              Inactivate
-                            </button>
-                            <button
-                              disabled={busyAction === `delete-${supplier.firebaseUID}`}
-                              onClick={() => runSupplierAction(supplier.firebaseUID!, "delete")}
-                              className="px-2 py-1 rounded bg-red-700"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        ) : (
-                          "-"
-                        )}
-                      </td>
+            <div className="space-y-4">
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    value={supplierQuery}
+                    onChange={(event) => setSupplierQuery(event.target.value)}
+                    placeholder="Search suppliers by name, email, UID, branch..."
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                  />
+                </div>
+
+                <select
+                  value={supplierApprovalFilter}
+                  onChange={(event) =>
+                    setSupplierApprovalFilter(event.target.value as "ALL" | "APPROVED" | "PENDING")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Approval</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="PENDING">Pending</option>
+                </select>
+
+                <select
+                  value={supplierActivityFilter}
+                  onChange={(event) =>
+                    setSupplierActivityFilter(event.target.value as "ALL" | "ACTIVE" | "INACTIVE")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Activity</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="INACTIVE">Inactive</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      "admin-suppliers.csv",
+                      filteredSuppliers.map((supplier) => ({
+                        name: supplier.name || "",
+                        email: supplier.email || "",
+                        firebaseUID: supplier.firebaseUID || "",
+                        approved: supplier.approved,
+                        active: supplier.active,
+                        ordersHandled: supplier.ordersHandled || 0,
+                        paidOrders: supplier.paidOrders || 0,
+                        netRevenue: supplier.netRevenue || 0,
+                        availableToClaim: supplier.availableToClaim || 0
+                      }))
+                    )
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl overflow-x-auto">
+                <table className="w-full min-w-[1700px] text-sm">
+                  <thead className="bg-gray-100/80 dark:bg-white/5">
+                    <tr>
+                      <th className="text-left p-3">Supplier</th>
+                      <th className="text-left p-3">Status</th>
+                      <th className="text-left p-3">Orders</th>
+                      <th className="text-left p-3">Gross</th>
+                      <th className="text-left p-3">Net</th>
+                      <th className="text-left p-3">Claimed</th>
+                      <th className="text-left p-3">Wallet</th>
+                      <th className="text-left p-3">Available</th>
+                      <th className="text-left p-3">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredSuppliers.map((supplier, index) => (
+                      <tr key={supplier.firebaseUID || supplier._id || `sup-${index}`} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="p-3">
+                          <p className="font-medium">{supplier.name || "-"}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300 break-all">{supplier.email || supplier.firebaseUID || "-"}</p>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(supplier.approved ? "approved" : "pending")}`}>
+                              {supplier.approved ? "Approved" : "Pending"}
+                            </span>
+                            <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(supplier.active ? "active" : "inactive")}`}>
+                              {supplier.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3">{supplier.ordersHandled || 0}</td>
+                        <td className="p-3">{formatCurrency(supplier.grossDeliveredRevenue)}</td>
+                        <td className="p-3">{formatCurrency(supplier.netRevenue)}</td>
+                        <td className="p-3">{formatCurrency(supplier.totalClaimed)}</td>
+                        <td className="p-3">{formatCurrency(supplier.walletBalance)}</td>
+                        <td className="p-3">{formatCurrency(supplier.availableToClaim)}</td>
+                        <td className="p-3">
+                          {supplier.firebaseUID ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => setSelectedSupplier(supplier)}
+                                className="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-1"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                View
+                              </button>
+
+                              <button
+                                disabled={busyAction === `approve-${supplier.firebaseUID}`}
+                                onClick={() => runSupplierAction(supplier.firebaseUID!, "approve")}
+                                className="px-2.5 py-1 rounded-lg bg-cyan-500/80 text-white"
+                              >
+                                Approve
+                              </button>
+
+                              <button
+                                disabled={busyAction === `deactivate-${supplier.firebaseUID}`}
+                                onClick={() => runSupplierAction(supplier.firebaseUID!, "deactivate")}
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/80 text-white"
+                              >
+                                Inactivate
+                              </button>
+
+                              <button
+                                disabled={busyAction === `activate-${supplier.firebaseUID}`}
+                                onClick={() => runSupplierAction(supplier.firebaseUID!, "activate")}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/80 text-white"
+                              >
+                                Activate
+                              </button>
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
           {activeTab === "orders" ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[1200px] text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    <th className="text-left p-3">Order ID</th>
-                    <th className="text-left p-3">User</th>
-                    <th className="text-left p-3">Supplier</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Payment</th>
-                    <th className="text-left p-3">Pages</th>
-                    <th className="text-left p-3">Amount</th>
-                    <th className="text-left p-3">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => (
-                    <tr key={order._id} className="border-t border-slate-800">
-                      <td className="p-3">{String(order._id)}</td>
-                      <td className="p-3">
-                        {order.user?.name || "Unknown"}
-                        <br />
-                        <span className="text-slate-400">{order.user?.email || order.userUID}</span>
-                      </td>
-                      <td className="p-3">{order.supplier?.name || "Unassigned"}</td>
-                      <td className="p-3">{order.status}</td>
-                      <td className="p-3">{order.paymentStatus}</td>
-                      <td className="p-3">{order.verifiedPages || order.pages || 0}</td>
-                      <td className="p-3">INR {order.finalPrice ?? order.estimatedPrice ?? 0}</td>
-                      <td className="p-3">{new Date(order.createdAt).toLocaleString()}</td>
-                    </tr>
+            <div className="space-y-4">
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    value={orderQuery}
+                    onChange={(event) => setOrderQuery(event.target.value)}
+                    placeholder="Search orders by id, user, supplier, status..."
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                  />
+                </div>
+
+                <select
+                  value={orderStatusFilter}
+                  onChange={(event) => setOrderStatusFilter(event.target.value as "ALL" | AdminOrder["status"])}
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Status</option>
+                  {[
+                    "pending",
+                    "accepted",
+                    "awaiting_payment",
+                    "printing",
+                    "printed",
+                    "delivered",
+                    "cancelled"
+                  ].map((status) => (
+                    <option key={status} value={status}>
+                      {formatStatus(status)}
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+
+                <select
+                  value={orderPaymentFilter}
+                  onChange={(event) =>
+                    setOrderPaymentFilter(event.target.value as "ALL" | "paid" | "unpaid")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Payments</option>
+                  <option value="paid">Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+
+                <select
+                  value={orderAssignmentFilter}
+                  onChange={(event) =>
+                    setOrderAssignmentFilter(event.target.value as "ALL" | "assigned" | "unassigned")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Assignments</option>
+                  <option value="assigned">Assigned</option>
+                  <option value="unassigned">Unassigned</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      "admin-orders.csv",
+                      filteredOrders.map((order) => ({
+                        orderId: order._id,
+                        user: order.user?.email || order.userUID,
+                        supplier: order.supplier?.email || order.supplierUID || "",
+                        status: order.status,
+                        paymentStatus: order.paymentStatus,
+                        requestType: order.requestType || "",
+                        printType: order.printType || "",
+                        pages: order.verifiedPages ?? order.pages ?? 0,
+                        amount: order.finalPrice ?? order.estimatedPrice ?? 0,
+                        createdAt: formatDateTime(order.createdAt)
+                      }))
+                    )
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl overflow-x-auto">
+                <table className="w-full min-w-[1450px] text-sm">
+                  <thead className="bg-gray-100/80 dark:bg-white/5">
+                    <tr>
+                      <th className="text-left p-3">Order</th>
+                      <th className="text-left p-3">User</th>
+                      <th className="text-left p-3">Supplier</th>
+                      <th className="text-left p-3">Status</th>
+                      <th className="text-left p-3">Payment</th>
+                      <th className="text-left p-3">Specs</th>
+                      <th className="text-left p-3">Amount</th>
+                      <th className="text-left p-3">Created</th>
+                      <th className="text-left p-3">Inspect</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.map((order) => (
+                      <tr key={order._id} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="p-3 font-medium">{String(order._id).slice(-10)}</td>
+                        <td className="p-3">
+                          <p>{order.user?.name || "Unknown"}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">{order.user?.email || order.userUID}</p>
+                        </td>
+                        <td className="p-3">{order.supplier?.name || "Unassigned"}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(order.status)}`}>
+                            {formatStatus(order.status)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(order.paymentStatus)}`}>
+                            {formatStatus(order.paymentStatus)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages
+                        </td>
+                        <td className="p-3">{formatCurrency(order.finalPrice ?? order.estimatedPrice)}</td>
+                        <td className="p-3">{formatDateTime(order.createdAt)}</td>
+                        <td className="p-3">
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
           {activeTab === "payments" ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    <th className="text-left p-3">Order</th>
-                    <th className="text-left p-3">User</th>
-                    <th className="text-left p-3">Amount</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Razorpay Payment ID</th>
-                    <th className="text-left p-3">Paid At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((payment) => (
-                    <tr key={payment.orderId} className="border-t border-slate-800">
-                      <td className="p-3">{payment.orderId}</td>
-                      <td className="p-3">{payment.user?.name || payment.user?.email || payment.userUID}</td>
-                      <td className="p-3">INR {payment.amount}</td>
-                      <td className="p-3">{payment.paymentStatus}</td>
-                      <td className="p-3">{payment.razorpayPaymentId || "-"}</td>
-                      <td className="p-3">{payment.paidAt ? new Date(payment.paidAt).toLocaleString() : "-"}</td>
+            <div className="space-y-4">
+              <div className="grid lg:grid-cols-4 gap-3">
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Payment Events</p>
+                  <p className="text-2xl font-semibold mt-1">{payments.length}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Paid</p>
+                  <p className="text-2xl font-semibold mt-1">{payments.filter((item) => item.paymentStatus === "paid").length}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Unpaid</p>
+                  <p className="text-2xl font-semibold mt-1">{payments.filter((item) => item.paymentStatus !== "paid").length}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Amount (Rows)</p>
+                  <p className="text-2xl font-semibold mt-1">
+                    {formatCurrency(payments.reduce((sum, item) => sum + Number(item.amount || 0), 0))}
+                  </p>
+                </div>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    value={paymentQuery}
+                    onChange={(event) => setPaymentQuery(event.target.value)}
+                    placeholder="Search payments by order, user, razorpay id..."
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                  />
+                </div>
+
+                <select
+                  value={paymentStatusFilter}
+                  onChange={(event) =>
+                    setPaymentStatusFilter(event.target.value as "ALL" | "paid" | "unpaid")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="paid">Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      "admin-payments.csv",
+                      filteredPayments.map((payment) => ({
+                        orderId: payment.orderId,
+                        user: payment.user?.email || payment.userUID,
+                        amount: payment.amount,
+                        paymentStatus: payment.paymentStatus,
+                        orderStatus: payment.status || "",
+                        razorpayOrderId: payment.razorpayOrderId || "",
+                        razorpayPaymentId: payment.razorpayPaymentId || "",
+                        paidAt: formatDateTime(payment.paidAt || ""),
+                        createdAt: formatDateTime(payment.createdAt || "")
+                      }))
+                    )
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl overflow-x-auto">
+                <table className="w-full min-w-[1300px] text-sm">
+                  <thead className="bg-gray-100/80 dark:bg-white/5">
+                    <tr>
+                      <th className="text-left p-3">Order</th>
+                      <th className="text-left p-3">User</th>
+                      <th className="text-left p-3">Amount</th>
+                      <th className="text-left p-3">Payment</th>
+                      <th className="text-left p-3">Order State</th>
+                      <th className="text-left p-3">Gateway IDs</th>
+                      <th className="text-left p-3">Paid At</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredPayments.map((payment) => (
+                      <tr key={`${payment.orderId}-${payment.razorpayPaymentId || "n"}`} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="p-3 font-medium">{String(payment.orderId).slice(-10)}</td>
+                        <td className="p-3">
+                          <p>{payment.user?.name || payment.user?.email || payment.userUID}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">{payment.user?.email || payment.userUID}</p>
+                        </td>
+                        <td className="p-3">{formatCurrency(payment.amount)}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(payment.paymentStatus)}`}>
+                            {formatStatus(payment.paymentStatus)}
+                          </span>
+                        </td>
+                        <td className="p-3">{formatStatus(payment.status || "-")}</td>
+                        <td className="p-3 text-xs">
+                          <button
+                            onClick={() => copyText(String(payment.razorpayPaymentId || ""))}
+                            className="block text-left hover:text-indigo-500"
+                          >
+                            Pay ID: {payment.razorpayPaymentId || "-"}
+                          </button>
+                          <button
+                            onClick={() => copyText(String(payment.razorpayOrderId || ""))}
+                            className="block text-left hover:text-indigo-500"
+                          >
+                            Ord ID: {payment.razorpayOrderId || "-"}
+                          </button>
+                        </td>
+                        <td className="p-3">{formatDateTime(payment.paidAt || payment.createdAt || "")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
           {activeTab === "payouts" ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[1300px] text-sm">
-                <thead className="bg-slate-800/60">
-                  <tr>
-                    <th className="text-left p-3">Supplier</th>
-                    <th className="text-left p-3">Email</th>
-                    <th className="text-left p-3">Amount</th>
-                    <th className="text-left p-3">Status</th>
-                    <th className="text-left p-3">Requested At</th>
-                    <th className="text-left p-3">Processed At</th>
-                    <th className="text-left p-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payoutRequests.map((request) => (
-                    <tr key={request._id} className="border-t border-slate-800">
-                      <td className="p-3">{request.supplier?.name || request.supplierUID}</td>
-                      <td className="p-3">{request.supplier?.email || "-"}</td>
-                      <td className="p-3">INR {request.amount}</td>
-                      <td className="p-3">{request.status}</td>
-                      <td className="p-3">{new Date(request.createdAt).toLocaleString()}</td>
-                      <td className="p-3">{request.processedAt ? new Date(request.processedAt).toLocaleString() : "-"}</td>
-                      <td className="p-3">
-                        {request.status === "pending" ? (
-                          <div className="flex gap-2">
-                            <button
-                              disabled={busyAction === `approve-${request._id}`}
-                              onClick={() => runPayoutAction(request._id, "approve")}
-                              className="px-2 py-1 rounded bg-emerald-700"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              disabled={busyAction === `reject-${request._id}`}
-                              onClick={() => runPayoutAction(request._id, "reject")}
-                              className="px-2 py-1 rounded bg-rose-700"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          "Processed"
-                        )}
-                      </td>
+            <div className="space-y-4">
+              <div className="grid lg:grid-cols-4 gap-3">
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Pending Requests</p>
+                  <p className="text-2xl font-semibold mt-1">{payoutRequests.filter((request) => request.status === "pending").length}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Pending Amount</p>
+                  <p className="text-2xl font-semibold mt-1">{formatCurrency(pendingPayoutAmount)}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Approved Requests</p>
+                  <p className="text-2xl font-semibold mt-1">{payoutRequests.filter((request) => request.status === "approved").length}</p>
+                </div>
+                <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Rejected Requests</p>
+                  <p className="text-2xl font-semibold mt-1">{payoutRequests.filter((request) => request.status === "rejected").length}</p>
+                </div>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl p-4 flex flex-wrap gap-3 items-center">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    value={payoutQuery}
+                    onChange={(event) => setPayoutQuery(event.target.value)}
+                    placeholder="Search payout requests by id, supplier, email..."
+                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                  />
+                </div>
+
+                <select
+                  value={payoutStatusFilter}
+                  onChange={(event) =>
+                    setPayoutStatusFilter(event.target.value as "ALL" | "pending" | "approved" | "rejected")
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                >
+                  <option value="ALL">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+
+                <button
+                  onClick={() =>
+                    downloadCsv(
+                      "admin-payouts.csv",
+                      filteredPayouts.map((request) => ({
+                        requestId: request._id,
+                        supplier: request.supplier?.email || request.supplierUID,
+                        amount: request.amount,
+                        status: request.status,
+                        note: request.note || "",
+                        createdAt: formatDateTime(request.createdAt),
+                        processedAt: formatDateTime(request.processedAt || "")
+                      }))
+                    )
+                  }
+                  className="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export
+                </button>
+              </div>
+
+              <div className="backdrop-blur-2xl bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-3xl overflow-x-auto">
+                <table className="w-full min-w-[1500px] text-sm">
+                  <thead className="bg-gray-100/80 dark:bg-white/5">
+                    <tr>
+                      <th className="text-left p-3">Request</th>
+                      <th className="text-left p-3">Supplier</th>
+                      <th className="text-left p-3">Amount</th>
+                      <th className="text-left p-3">Status</th>
+                      <th className="text-left p-3">Requested</th>
+                      <th className="text-left p-3">Processed</th>
+                      <th className="text-left p-3">Note</th>
+                      <th className="text-left p-3">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredPayouts.map((request) => (
+                      <tr key={request._id} className="border-t border-gray-200 dark:border-white/10">
+                        <td className="p-3 font-medium">{String(request._id).slice(-10)}</td>
+                        <td className="p-3">
+                          <p>{request.supplier?.name || request.supplierUID}</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">{request.supplier?.email || "-"}</p>
+                        </td>
+                        <td className="p-3">{formatCurrency(request.amount)}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(request.status)}`}>
+                            {formatStatus(request.status)}
+                          </span>
+                        </td>
+                        <td className="p-3">{formatDateTime(request.createdAt)}</td>
+                        <td className="p-3">{formatDateTime(request.processedAt || "")}</td>
+                        <td className="p-3">
+                          <input
+                            value={payoutNotes[request._id] ?? request.note ?? ""}
+                            onChange={(event) =>
+                              setPayoutNotes((prev) => ({
+                                ...prev,
+                                [request._id]: event.target.value
+                              }))
+                            }
+                            placeholder="Add processing note"
+                            className="w-64 px-3 py-2 rounded-lg bg-white/80 dark:bg-black/30 border border-gray-200 dark:border-white/20"
+                          />
+                        </td>
+                        <td className="p-3">
+                          {request.status === "pending" ? (
+                            <div className="flex gap-2">
+                              <button
+                                disabled={busyAction === `approve-${request._id}`}
+                                onClick={() => runPayoutAction(request._id, "approve")}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-500/90 text-white"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                disabled={busyAction === `reject-${request._id}`}
+                                onClick={() => runPayoutAction(request._id, "reject")}
+                                className="px-3 py-1.5 rounded-lg bg-rose-500/90 text-white"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
 
           {activeTab === "danger" ? (
-            <div className="bg-red-950/30 border border-red-700 rounded-xl p-6 space-y-4">
-              <h3 className="text-xl font-semibold text-red-300">Danger Zone: Clear Entire Database</h3>
-              <p className="text-sm text-red-200">
-                This removes all users (except admins), all suppliers, and all orders permanently.
-              </p>
+            <div className="space-y-5">
+              <div className="backdrop-blur-2xl bg-rose-500/10 border border-rose-500/40 rounded-3xl p-6 space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-rose-400">Danger Zone</p>
+                  <h3 className="text-2xl font-semibold mt-2">Clear Entire Database</h3>
+                  <p className="text-sm mt-2 text-rose-200">
+                    This permanently removes all users (except admins), all suppliers, and all orders.
+                  </p>
+                </div>
 
-              <div className="space-y-3 max-w-xl">
-                <input
-                  value={confirmPhrase}
-                  onChange={(e) => setConfirmPhrase(e.target.value)}
-                  placeholder="Type: CLEAR ENTIRE DATABASE"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
-                />
-                <input
-                  value={confirmOwnerEmail}
-                  onChange={(e) => setConfirmOwnerEmail(e.target.value)}
-                  placeholder="Type your owner email"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2"
-                />
-                <button
-                  disabled={busyAction === "clear-db"}
-                  onClick={clearDatabase}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white disabled:opacity-60"
-                >
-                  {busyAction === "clear-db" ? "Clearing..." : "Clear Database"}
-                </button>
+                <div className="space-y-3 max-w-xl">
+                  <input
+                    value={confirmPhrase}
+                    onChange={(event) => setConfirmPhrase(event.target.value)}
+                    placeholder="Type: CLEAR ENTIRE DATABASE"
+                    className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-rose-500/40"
+                  />
+
+                  <input
+                    value={confirmOwnerEmail}
+                    onChange={(event) => setConfirmOwnerEmail(event.target.value)}
+                    placeholder="Type your owner email"
+                    className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-rose-500/40"
+                  />
+
+                  <button
+                    disabled={busyAction === "clear-db"}
+                    onClick={clearDatabase}
+                    className="px-4 py-2.5 rounded-xl bg-rose-600 text-white disabled:opacity-60"
+                  >
+                    {busyAction === "clear-db" ? "Clearing..." : "Clear Database"}
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
         </div>
-      </div>
-    </RoleGuard>
+      </section>
+
+      {selectedUser ? (
+        <div className="fixed inset-0 z-[120]">
+          <button
+            onClick={() => setSelectedUser(null)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-md"
+            aria-label="Close user profile"
+          />
+
+          <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-white/85 dark:bg-black/85 backdrop-blur-3xl border-l border-gray-200 dark:border-white/10 p-6 overflow-y-auto">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">User Profile</p>
+                <h3 className="text-2xl font-semibold mt-2">{selectedUser.name || "Unknown user"}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedUser.email || selectedUser.firebaseUID}</p>
+              </div>
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="w-9 h-9 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Role</p>
+                <p className="font-semibold mt-1">{selectedUser.role}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Phone</p>
+                <p className="font-semibold mt-1">{selectedUser.phone || "-"}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Branch / Section</p>
+                <p className="font-semibold mt-1">{selectedUser.branch || "-"} {selectedUser.section ? `• ${selectedUser.section}` : ""}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Roll No</p>
+                <p className="font-semibold mt-1">{selectedUser.rollNo || "-"}</p>
+              </div>
+            </div>
+
+            {userPanelMetrics ? (
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Orders</p>
+                  <p className="font-semibold mt-1">{userPanelMetrics.orderCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Paid Orders</p>
+                  <p className="font-semibold mt-1">{userPanelMetrics.paidCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 col-span-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Spend</p>
+                  <p className="font-semibold mt-1">{formatCurrency(userPanelMetrics.spend)}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 space-y-2">
+              <p className="text-sm font-medium">Quick Actions</p>
+
+              <div className="flex flex-wrap gap-2">
+                {selectedUser.firebaseUID ? (
+                  <>
+                    <button
+                      onClick={() => runUserAction(selectedUser.firebaseUID!, "approve")}
+                      disabled={busyAction === `approve-${selectedUser.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-cyan-500/90 text-white text-sm"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => runUserAction(selectedUser.firebaseUID!, "activate")}
+                      disabled={busyAction === `activate-${selectedUser.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-emerald-500/90 text-white text-sm"
+                    >
+                      Activate
+                    </button>
+                    <button
+                      onClick={() => runUserAction(selectedUser.firebaseUID!, "deactivate")}
+                      disabled={busyAction === `deactivate-${selectedUser.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-amber-500/90 text-white text-sm"
+                    >
+                      Suspend
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium mb-2">Recent Orders</p>
+              <div className="space-y-2">
+                {(selectedUser.firebaseUID ? (userOrdersMap.get(selectedUser.firebaseUID) || []).slice(0, 5) : []).map((order) => (
+                  <button
+                    key={order._id}
+                    onClick={() => setSelectedOrder(order)}
+                    className="w-full text-left rounded-xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                  >
+                    <p className="text-sm font-medium">{String(order._id).slice(-10)} • {formatStatus(order.status)}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{formatCurrency(order.finalPrice ?? order.estimatedPrice)} • {formatDateTime(order.createdAt)}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
+      {selectedSupplier ? (
+        <div className="fixed inset-0 z-[120]">
+          <button
+            onClick={() => setSelectedSupplier(null)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-md"
+            aria-label="Close supplier profile"
+          />
+
+          <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-white/85 dark:bg-black/85 backdrop-blur-3xl border-l border-gray-200 dark:border-white/10 p-6 overflow-y-auto">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Supplier Profile</p>
+                <h3 className="text-2xl font-semibold mt-2">{selectedSupplier.name || "Unknown supplier"}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedSupplier.email || selectedSupplier.firebaseUID}</p>
+              </div>
+              <button
+                onClick={() => setSelectedSupplier(null)}
+                className="w-9 h-9 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Approval</p>
+                <p className="font-semibold mt-1">{selectedSupplier.approved ? "Approved" : "Pending"}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Activity</p>
+                <p className="font-semibold mt-1">{selectedSupplier.active ? "Active" : "Inactive"}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Phone</p>
+                <p className="font-semibold mt-1">{selectedSupplier.phone || "-"}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Branch / Year</p>
+                <p className="font-semibold mt-1">{selectedSupplier.branch || "-"} {selectedSupplier.year ? `• ${selectedSupplier.year}` : ""}</p>
+              </div>
+            </div>
+
+            {supplierPanelMetrics ? (
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Orders handled</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.orderCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Delivered</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.deliveredCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Queue</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.activeOrders}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Paid Orders</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.paidCount}</p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Net Revenue</p>
+                <p className="font-semibold mt-1">{formatCurrency(selectedSupplier.netRevenue)}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Available to Claim</p>
+                <p className="font-semibold mt-1">{formatCurrency(selectedSupplier.availableToClaim)}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-2">
+              <p className="text-sm font-medium">Quick Actions</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedSupplier.firebaseUID ? (
+                  <>
+                    <button
+                      onClick={() => runSupplierAction(selectedSupplier.firebaseUID!, "approve")}
+                      disabled={busyAction === `approve-${selectedSupplier.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-cyan-500/90 text-white text-sm"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => runSupplierAction(selectedSupplier.firebaseUID!, "activate")}
+                      disabled={busyAction === `activate-${selectedSupplier.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-emerald-500/90 text-white text-sm"
+                    >
+                      Activate
+                    </button>
+                    <button
+                      onClick={() => runSupplierAction(selectedSupplier.firebaseUID!, "deactivate")}
+                      disabled={busyAction === `deactivate-${selectedSupplier.firebaseUID}`}
+                      className="px-3 py-2 rounded-xl bg-amber-500/90 text-white text-sm"
+                    >
+                      Inactivate
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium mb-2">Recent Assigned Orders</p>
+              <div className="space-y-2">
+                {(selectedSupplier.firebaseUID
+                  ? (supplierOrdersMap.get(selectedSupplier.firebaseUID) || []).slice(0, 5)
+                  : []
+                ).map((order) => (
+                  <button
+                    key={order._id}
+                    onClick={() => setSelectedOrder(order)}
+                    className="w-full text-left rounded-xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                  >
+                    <p className="text-sm font-medium">{String(order._id).slice(-10)} • {formatStatus(order.status)}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{formatCurrency(order.finalPrice ?? order.estimatedPrice)} • {formatDateTime(order.createdAt)}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
+      {selectedOrder ? (
+        <div className="fixed inset-0 z-[130]">
+          <button
+            onClick={() => setSelectedOrder(null)}
+            className="absolute inset-0 bg-black/40 backdrop-blur-md"
+            aria-label="Close order panel"
+          />
+
+          <aside className="absolute right-0 top-0 h-full w-full max-w-lg bg-white/85 dark:bg-black/85 backdrop-blur-3xl border-l border-gray-200 dark:border-white/10 p-6 overflow-y-auto">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Order Diagnostics</p>
+                <h3 className="text-2xl font-semibold mt-2">{String(selectedOrder._id).slice(-10)}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="w-9 h-9 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
+                <p className="font-semibold mt-1">{formatStatus(selectedOrder.status)}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Payment</p>
+                <p className="font-semibold mt-1">{formatStatus(selectedOrder.paymentStatus)}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Type</p>
+                <p className="font-semibold mt-1">{String(selectedOrder.printType || "-").toUpperCase()}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Pages</p>
+                <p className="font-semibold mt-1">{selectedOrder.verifiedPages ?? selectedOrder.pages ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 col-span-2">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Amount</p>
+                <p className="font-semibold mt-1">{formatCurrency(selectedOrder.finalPrice ?? selectedOrder.estimatedPrice)}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3 text-sm">
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">User</p>
+                <p className="font-medium">{selectedOrder.user?.name || "Unknown"}</p>
+                <p className="text-gray-600 dark:text-gray-300 text-xs">{selectedOrder.user?.email || selectedOrder.userUID}</p>
+              </div>
+
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Supplier</p>
+                <p className="font-medium">{selectedOrder.supplier?.name || "Unassigned"}</p>
+                <p className="text-gray-600 dark:text-gray-300 text-xs">{selectedOrder.supplierUID || "-"}</p>
+              </div>
+
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Request Type</p>
+                <p className="font-medium">{formatStatus(selectedOrder.requestType || "global")}</p>
+              </div>
+
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Instruction</p>
+                <p className="font-medium">{selectedOrder.instruction || "-"}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Created</p>
+                  <p className="font-medium">{formatDateTime(selectedOrder.createdAt)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">Paid At</p>
+                  <p className="font-medium">{formatDateTime(selectedOrder.paidAt || "")}</p>
+                </div>
+              </div>
+
+              {selectedOrder.fileURL ? (
+                <a
+                  href={selectedOrder.fileURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10"
+                >
+                  Open Uploaded File
+                </a>
+              ) : null}
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </main>
   )
 }
