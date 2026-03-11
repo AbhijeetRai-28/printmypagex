@@ -11,6 +11,7 @@ import {
   signOut
 } from "firebase/auth"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { authFetch } from "@/lib/client-auth"
 
 export default function SupplierLogin() {
   const [email, setEmail] = useState("")
@@ -20,7 +21,7 @@ export default function SupplierLogin() {
   const [infoMessage, setInfoMessage] = useState("")
 
   const syncUserEmail = async (uid: string, userEmail: string) => {
-    await fetch("/api/user/check-user", {
+    await authFetch("/api/user/check-user", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -32,7 +33,7 @@ export default function SupplierLogin() {
       })
     })
 
-    await fetch("/api/supplier/sync-email", {
+    await authFetch("/api/supplier/sync-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -46,7 +47,7 @@ export default function SupplierLogin() {
   }
 
   const routeSupplier = async (uid: string) => {
-    const res = await fetch(`/api/supplier/me?firebaseUID=${uid}`)
+    const res = await authFetch(`/api/supplier/me?firebaseUID=${uid}`)
     const data = await res.json()
 
     if (isOwnerEmail(auth.currentUser?.email || "")) {

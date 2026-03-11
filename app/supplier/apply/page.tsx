@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useState } from "react"
 import { auth } from "@/lib/firebase"
+import { authFetch } from "@/lib/client-auth"
 
 type SupplierForm = {
   name: string
@@ -45,7 +46,7 @@ export default function SupplierApply() {
       return
     }
 
-    const res = await fetch("/api/supplier/apply", {
+    const res = await authFetch("/api/supplier/apply", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

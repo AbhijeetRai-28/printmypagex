@@ -7,6 +7,7 @@ import { v2 as cloudinary } from "cloudinary"
 import type { UploadApiResponse } from "cloudinary"
 import pdf from "pdf-parse/lib/pdf-parse.js"
 import { sendOrderCreatedNotifications } from "@/lib/order-email"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export const runtime = "nodejs"
 
@@ -20,6 +21,8 @@ cloudinary.config({
 export async function POST(req: Request) {
 
   try {
+    const auth = await authenticateUserRequest(req)
+    if (!auth.ok) return auth.response
 
     await connectDB()
 
@@ -27,7 +30,8 @@ export async function POST(req: Request) {
 
     const file = formData.get("file") as File
     const printType = formData.get("printType") as string
-    const firebaseUID = formData.get("firebaseUID") as string
+    const requestedUID = String(formData.get("firebaseUID") || "").trim()
+    const firebaseUID = auth.uid
     const userEmail = formData.get("userEmail") as string
     const requestType = formData.get("requestType") as string
     const supplier = formData.get("supplier") as string
@@ -44,10 +48,17 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!firebaseUID) {
+    if (!requestedUID) {
       return NextResponse.json(
         { error: "User authentication required" },
         { status: 401 }
+      )
+    }
+
+    if (requestedUID !== firebaseUID) {
+      return NextResponse.json(
+        { error: "Unauthorized UID" },
+        { status: 403 }
       )
     }
 

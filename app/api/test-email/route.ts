@@ -5,17 +5,31 @@ export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
-    console.log("TEST_EMAIL_DEBUG: Endpoint hit", {
-      hasGmailUser: Boolean(process.env.GMAIL_USER),
-      hasGmailAppPassword: Boolean(process.env.GMAIL_APP_PASSWORD),
-      hasEmailFrom: Boolean(process.env.EMAIL_FROM),
-      hasTestEmailKey: Boolean(process.env.TEST_EMAIL_KEY)
-    })
-
+    const testRoutesEnabled = process.env.ENABLE_TEST_ENDPOINTS === "true"
     const debugKey = process.env.TEST_EMAIL_KEY
     const headerKey = req.headers.get("x-test-email-key")
 
-    if (debugKey && headerKey !== debugKey) {
+    if (!testRoutesEnabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Test email endpoint is disabled"
+        },
+        { status: 404 }
+      )
+    }
+
+    if (!debugKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "TEST_EMAIL_KEY is not configured"
+        },
+        { status: 500 }
+      )
+    }
+
+    if (headerKey !== debugKey) {
       return NextResponse.json(
         {
           success: false,
@@ -47,8 +61,6 @@ export async function POST(req: Request) {
       html: "<h2>Test Email</h2><p>If you received this, your mail setup works.</p>"
     })
 
-    console.log("TEST_EMAIL_DEBUG: Test email sent successfully", { to })
-
     return NextResponse.json({
       success: true,
       message: "Test email sent",
@@ -59,8 +71,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to send test email",
-        error: error instanceof Error ? error.message : "Unknown error"
+        message: "Failed to send test email"
       },
       { status: 500 }
     )

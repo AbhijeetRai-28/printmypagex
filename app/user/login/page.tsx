@@ -12,6 +12,7 @@ import {
 } from "firebase/auth"
 import Navbar from "@/components/Navbar"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { authFetch } from "@/lib/client-auth"
 
 export default function UserLogin() {
   const [email, setEmail] = useState("")
@@ -21,7 +22,7 @@ export default function UserLogin() {
   const [resetMessage, setResetMessage] = useState("")
 
   const syncAndRouteUser = async (uid: string, userEmail: string) => {
-    await fetch("/api/user/check-user", {
+    await authFetch("/api/user/check-user", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -33,7 +34,7 @@ export default function UserLogin() {
       })
     })
 
-    const res = await fetch(`/api/user/details?firebaseUID=${uid}`)
+    const res = await authFetch(`/api/user/details?firebaseUID=${uid}`)
 
     if (res.status === 404) {
       window.location.href = "/complete-profile"

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { auth } from "@/lib/firebase"
 import DashboardNavbar from "@/components/DashboardNavbar"
 import toast from "react-hot-toast"
+import { authFetch } from "@/lib/client-auth"
 
 import {
   ResponsiveContainer,
@@ -60,9 +61,9 @@ export default function UserDashboard() {
       try {
 
         const [userRes, orderRes, supRes] = await Promise.all([
-          fetch(`/api/user/details?firebaseUID=${user.uid}`),
-          fetch(`/api/orders/user?firebaseUID=${user.uid}`),
-          fetch("/api/supplier/list")
+          authFetch(`/api/user/details?firebaseUID=${user.uid}`),
+          authFetch(`/api/orders/user?firebaseUID=${user.uid}`),
+          authFetch("/api/supplier/list")
         ])
 
         const userJson = await userRes.json()
@@ -178,7 +179,7 @@ export default function UserDashboard() {
     formData.append("duplex",String(duplex))
     formData.append("instruction",instruction)
 
-    const res=await fetch("/api/upload",{
+    const res=await authFetch("/api/upload",{
       method:"POST",
       body:formData
     })
@@ -272,7 +273,7 @@ export default function UserDashboard() {
         photoFormData.append("file", photoFile)
         photoFormData.append("firebaseUID", user.uid)
 
-        const photoRes = await fetch("/api/user/upload-photo", {
+        const photoRes = await authFetch("/api/user/upload-photo", {
           method: "POST",
           body: photoFormData
         })
@@ -288,7 +289,7 @@ export default function UserDashboard() {
         nextPhotoURL = String(photoData.photoURL || nextPhotoURL)
       }
 
-      const res = await fetch("/api/user/update-profile", {
+      const res = await authFetch("/api/user/update-profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

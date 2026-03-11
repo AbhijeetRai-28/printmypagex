@@ -10,6 +10,7 @@ import {
   signInWithPopup,
   signOut
 } from "firebase/auth"
+import { authFetch } from "@/lib/client-auth"
 
 export default function UserRegister() {
   const [email, setEmail] = useState("")
@@ -20,7 +21,7 @@ export default function UserRegister() {
   const [successMessage, setSuccessMessage] = useState("")
 
   const syncAndRouteUser = async (uid: string, userEmail: string) => {
-    await fetch("/api/user/check-user", {
+    await authFetch("/api/user/check-user", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -32,7 +33,7 @@ export default function UserRegister() {
       })
     })
 
-    const res = await fetch(`/api/user/details?firebaseUID=${uid}`)
+    const res = await authFetch(`/api/user/details?firebaseUID=${uid}`)
 
     if (res.status === 404) {
       window.location.href = "/complete-profile"

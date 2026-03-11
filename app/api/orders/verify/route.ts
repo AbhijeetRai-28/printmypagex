@@ -3,26 +3,41 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
+import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateSupplierRequest(req)
+    if (!auth.ok) return auth.response
+
     await connectDB()
 
     const body = await req.json()
     const orderId = body.orderId as string | undefined
-    const supplierUID = body.supplierUID as string | undefined
+    const supplierUIDFromBody = body.supplierUID as string | undefined
+    const supplierUID = auth.uid
     const pagesValue = body.verifiedPages ?? body.pages
     const verifiedPages = Number(pagesValue)
 
-    if (!orderId || !supplierUID) {
+    if (!orderId) {
       return NextResponse.json(
         {
           success: false,
           message: "Missing order or supplier details"
         },
         { status: 400 }
+      )
+    }
+
+    if (supplierUIDFromBody && supplierUIDFromBody !== supplierUID) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized supplier"
+        },
+        { status: 403 }
       )
     }
 
@@ -105,7 +120,7 @@ export async function POST(req: Request) {
 
     try {
       await pusherServer.trigger(
-        `user-${order.userUID}`,
+        `private-user-${order.userUID}`,
         "order-updated",
         order
       )

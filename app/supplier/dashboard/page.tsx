@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged } from "firebase/auth"
 import SupplierGuard from "@/components/SupplierGuard"
+import { authFetch } from "@/lib/client-auth"
 
 import {
 ResponsiveContainer,
@@ -74,8 +75,8 @@ const loadOrders = async(uid:string)=>{
 try{
 
 const [availableRes,supplierRes] = await Promise.all([
-fetch(`/api/orders/available?supplierUID=${uid}`),
-fetch(`/api/orders/supplier?supplierUID=${uid}`)
+authFetch(`/api/orders/available?supplierUID=${uid}`),
+authFetch(`/api/orders/supplier?supplierUID=${uid}`)
 ])
 
 const availableData = await availableRes.json()
@@ -90,12 +91,8 @@ setLoading(false)
 
 }
 
-const loadWallet = async(token:string)=>{
-const res = await fetch("/api/supplier/wallet",{
-headers:{
-Authorization:`Bearer ${token}`
-}
-})
+const loadWallet = async()=>{
+const res = await authFetch("/api/supplier/wallet")
 
 const data = await res.json()
 
@@ -122,21 +119,13 @@ alert(`Amount exceeds available wallet balance: ₹${wallet.availableToClaim}`)
 return
 }
 
-const user = auth.currentUser
-if(!user){
-alert("Login required")
-return
-}
-
 setClaiming(true)
 
 try{
-const token = await user.getIdToken(true)
-const res = await fetch("/api/supplier/payout-request",{
+const res = await authFetch("/api/supplier/payout-request",{
 method:"POST",
 headers:{
-"Content-Type":"application/json",
-Authorization:`Bearer ${token}`
+"Content-Type":"application/json"
 },
 body:JSON.stringify({amount})
 })
@@ -150,7 +139,7 @@ return
 }
 
 setClaimAmount("")
-await loadWallet(token)
+await loadWallet()
 alert("Payout request sent to admin for approval")
 }catch{
 alert("Failed to submit payout request")
@@ -165,7 +154,7 @@ const unsubscribe = onAuthStateChanged(auth,async(user)=>{
 
 if(!user) return
 
-fetch("/api/supplier/sync-email",{
+authFetch("/api/supplier/sync-email",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -177,10 +166,9 @@ photoURL:user.photoURL || ""
 })
 }).catch(()=>{})
 
-const token = await user.getIdToken(true)
 await Promise.all([
 loadOrders(user.uid),
-loadWallet(token)
+loadWallet()
 ])
 
 })

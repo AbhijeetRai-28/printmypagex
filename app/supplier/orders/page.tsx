@@ -7,12 +7,16 @@ import toast from "react-hot-toast"
 import { pusherClient } from "@/lib/pusher-client"
 import SupplierGuard from "@/components/SupplierGuard"
 import ProfileCard from "@/components/ProfileCard"
+import { authFetch } from "@/lib/client-auth"
 
 type SupplierOrderDetail = {
   _id: string
   status: string
   paymentStatus: string
   createdAt: string
+  acceptedAt?: string | null
+  paidAt?: string | null
+  deliveredAt?: string | null
   pages?: number
   verifiedPages?: number | null
   userName?: string
@@ -46,15 +50,16 @@ const [selectedOrder,setSelectedOrder] = useState<SupplierOrderDetail | null>(nu
 const [uid,setUid] = useState<string | null>(null)
 const [filter,setFilter] = useState("pending")
 const [verifiedPages,setVerifiedPages] = useState<number>(0)
+const [showAcceptConfirm,setShowAcceptConfirm] = useState(false)
 
 async function loadOrders(uid:string){
 
 try{
 
-const res1 = await fetch(`/api/orders/available?supplierUID=${uid}`)
+const res1 = await authFetch(`/api/orders/available?supplierUID=${uid}`)
 const data1 = await res1.json()
 
-const res2 = await fetch(`/api/orders/supplier?supplierUID=${uid}`)
+const res2 = await authFetch(`/api/orders/supplier?supplierUID=${uid}`)
 const data2 = await res2.json()
 
 setAvailable(data1.orders || [])
@@ -76,7 +81,7 @@ const unsubscribe = onAuthStateChanged(auth,(user)=>{
 
 if(!user) return
 
-fetch("/api/supplier/sync-email",{
+authFetch("/api/supplier/sync-email",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -101,7 +106,7 @@ useEffect(()=>{
 
 if(!uid) return
 
-const channel = pusherClient.subscribe(`supplier-${uid}`)
+const channel = pusherClient.subscribe(`private-supplier-${uid}`)
 
 channel.bind("order-updated",(updatedOrder:SupplierOrderDetail)=>{
 
@@ -142,26 +147,38 @@ userProfile: updatedOrder.userProfile ?? prev.userProfile
 })
 
 return ()=>{
-pusherClient.unsubscribe(`supplier-${uid}`)
+pusherClient.unsubscribe(`private-supplier-${uid}`)
 }
 
 },[uid])
 
 
+const openAcceptModal = (order: SupplierOrderDetail) => {
+setSelectedOrder(order)
+setVerifiedPages(order.verifiedPages ?? order.pages ?? 0)
+setShowAcceptConfirm(false)
+}
+
 const acceptOrder = async(id:string)=>{
 
 if(!uid) return
 
+if(!Number.isFinite(verifiedPages) || verifiedPages<=0){
+toast.error("Please verify page count before accepting")
+return
+}
+
 try{
 
-const res = await fetch("/api/orders/accept",{
+const res = await authFetch("/api/orders/accept",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
 },
 body:JSON.stringify({
 orderId:id,
-supplierUID:uid
+supplierUID:uid,
+verifiedPages
 })
 })
 
@@ -172,11 +189,13 @@ toast.error(data.message || "Failed to accept order")
 return
 }
 
-toast.success("Order accepted")
+toast.success("Order accepted and pages verified")
 
 setAvailable(prev=>prev.filter(o=>o._id!==id))
 
 loadOrders(uid)
+setSelectedOrder(null)
+setShowAcceptConfirm(false)
 
 }catch{
 toast.error("Failed to accept order")
@@ -191,7 +210,7 @@ if(!uid) return
 
 try{
 
-await fetch("/api/orders/supplier-cancel",{
+const res = await authFetch("/api/orders/supplier-cancel",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -201,6 +220,13 @@ orderId,
 supplierUID:uid
 })
 })
+
+const data = await res.json().catch(()=>({}))
+
+if(!res.ok || !data.success){
+toast.error(data.message || "Failed to cancel order")
+return
+}
 
 toast.success("Order cancelled")
 
@@ -221,7 +247,7 @@ if(!uid) return
 
 try{
 
-const res = await fetch("/api/orders/update-status",{
+const res = await authFetch("/api/orders/update-status",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -269,7 +295,7 @@ return
 
 try{
 
-const res = await fetch("/api/orders/verify",{
+const res = await authFetch("/api/orders/verify",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -324,6 +350,9 @@ return "bg-purple-500/20 text-purple-400 border border-purple-400/30"
 return "bg-gray-500/20 text-gray-400 border border-gray-400/20"
 
 }
+
+const formatStatus = (status:string)=>
+status.replace(/_/g," ").toUpperCase()
 
 
 let displayOrders:SupplierOrderDetail[]=[]
@@ -419,7 +448,7 @@ className="bg-card p-10 rounded-3xl border border-white/10 hover:scale-[1.02] tr
 <span
 className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getStatusColor(order.status)}`}
 >
-{order.status.toUpperCase()}
+{formatStatus(order.status)}
 </span>
 
 </div>
@@ -478,10 +507,10 @@ View Details →
 {order.status==="pending" &&(
 
 <button
-onClick={()=>acceptOrder(order._id)}
+onClick={()=>openAcceptModal(order)}
 className="bg-primary px-6 py-2 rounded-xl text-black font-semibold"
 >
-Accept
+Verify & Accept
 </button>
 
 )}
@@ -600,7 +629,7 @@ Final Price: ₹{selectedOrder.finalPrice}
 </p>
 )}
 
-<p>Status: {selectedOrder.status}</p>
+<p>Status: {formatStatus(selectedOrder.status)}</p>
 <p>Payment: {selectedOrder.paymentStatus}</p>
 
 <p>
@@ -633,8 +662,9 @@ Order Timeline
 
 {[
 {title:"Order Placed",done:true},
-{title:"Accepted",done:selectedOrder.status!=="pending"},
+{title:"Accepted & Verified",done:selectedOrder.status!=="pending"},
 {title:"Awaiting Payment",done:["awaiting_payment","printing","printed","delivered"].includes(selectedOrder.status)},
+{title:"Paid",done:selectedOrder.paymentStatus==="paid"},
 {title:"Printing",done:["printing","printed","delivered"].includes(selectedOrder.status)},
 {title:"Printed",done:["printed","delivered"].includes(selectedOrder.status)},
 {title:"Delivered",done:selectedOrder.status==="delivered"}
@@ -673,12 +703,30 @@ ${active
 
 <div className="flex gap-4 mt-8">
 
+{selectedOrder.status==="pending" &&(
+<button
+onClick={()=>{
+if(!Number.isFinite(verifiedPages) || verifiedPages<=0){
+toast.error("Please verify page count first")
+return
+}
+setShowAcceptConfirm(true)
+}}
+className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
+>
+Verify Pages & Accept
+</button>
+)}
+
+{["accepted","awaiting_payment"].includes(selectedOrder.status) &&
+selectedOrder.paymentStatus!=="paid" &&(
 <button
 onClick={()=>verifyPages(selectedOrder._id)}
 className="bg-green-500 px-6 py-2 rounded-xl font-semibold"
 >
-Verify Pages
+Update Verified Pages
 </button>
+)}
 
 {selectedOrder.status==="awaiting_payment" && selectedOrder.paymentStatus==="paid" &&(
 <button
@@ -708,7 +756,10 @@ Mark Delivered
 )}
 
 <button
-onClick={()=>setSelectedOrder(null)}
+onClick={()=>{
+setShowAcceptConfirm(false)
+setSelectedOrder(null)
+}}
 className="bg-primary px-6 py-2 rounded-xl text-black font-semibold"
 >
 Close
@@ -720,6 +771,39 @@ Close
 
 </div>
 
+)}
+
+{showAcceptConfirm && selectedOrder && (
+<div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-md flex items-center justify-center p-4">
+<div className="w-full max-w-md rounded-3xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-[0_12px_50px_rgba(0,0,0,0.45)] p-7">
+<h3 className="text-xl font-semibold text-white mb-3">
+Confirm Page Verification
+</h3>
+<p className="text-gray-200 text-sm leading-relaxed">
+Have you verified the page count carefully? This will accept the order with{" "}
+<span className="font-semibold text-white">{verifiedPages}</span> pages and move it to payment.
+</p>
+
+<div className="flex gap-3 mt-6">
+<button
+onClick={()=>{
+setShowAcceptConfirm(false)
+acceptOrder(selectedOrder._id)
+}}
+className="flex-1 bg-green-500 hover:bg-green-400 transition px-4 py-2 rounded-xl font-semibold text-black"
+>
+Yes, Accept
+</button>
+
+<button
+onClick={()=>setShowAcceptConfirm(false)}
+className="flex-1 bg-white/15 hover:bg-white/25 transition border border-white/20 px-4 py-2 rounded-xl font-semibold text-white"
+>
+No, Recheck
+</button>
+</div>
+</div>
+</div>
 )}
 
 </div>

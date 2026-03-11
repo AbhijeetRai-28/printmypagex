@@ -2,9 +2,10 @@
 
 import { useEffect,useState } from "react"
 import { auth } from "@/lib/firebase"
-import { onAuthStateChanged } from "firebase/auth"
+import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter } from "next/navigation"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { authFetch } from "@/lib/client-auth"
 
 export default function SupplierGuard({
 children
@@ -21,7 +22,7 @@ const unsub = onAuthStateChanged(auth,async(user)=>{
 
 if(!user){
 setLoading(false)
-router.push("/supplier/login")
+router.replace("/supplier/login")
 return
 }
 
@@ -30,7 +31,8 @@ setLoading(false)
 return
 }
 
-const res = await fetch(
+try{
+const res = await authFetch(
 `/api/supplier/me?firebaseUID=${user.uid}`
 )
 
@@ -38,23 +40,28 @@ const data = await res.json()
 
 if(!data.supplier){
 setLoading(false)
-router.push("/supplier/register")
+router.replace("/supplier/register")
 return
 }
 
 if(!data.supplier.approved){
 setLoading(false)
-router.push("/supplier")
+router.replace("/supplier")
 return
 }
 
 if(!data.supplier.active){
 setLoading(false)
-router.push("/supplier")
+router.replace("/supplier")
 return
 }
 
 setLoading(false)
+}catch{
+await signOut(auth).catch(()=>{})
+setLoading(false)
+router.replace("/supplier/login")
+}
 
 })
 

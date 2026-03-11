@@ -33,5 +33,7 @@ const SupplierPayoutRequestSchema = new mongoose.Schema({
   }
 })
 
+SupplierPayoutRequestSchema.index({ supplierUID: 1, status: 1, createdAt: -1 })
+
 export default mongoose.models.SupplierPayoutRequest ||
   mongoose.model("SupplierPayoutRequest", SupplierPayoutRequestSchema)

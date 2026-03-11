@@ -37,7 +37,14 @@ export async function POST(req: Request) {
       .update(rawBody)
       .digest("hex")
 
-    if (expectedSignature !== signature) {
+    const expectedBuffer = Buffer.from(expectedSignature, "hex")
+    const receivedBuffer = Buffer.from(signature, "hex")
+
+    const validSignature =
+      expectedBuffer.length === receivedBuffer.length &&
+      crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+
+    if (!validSignature) {
       return NextResponse.json(
         {
           success: false,
@@ -78,6 +85,13 @@ export async function POST(req: Request) {
       order.paymentStatus = "paid"
       order.razorpayPaymentId = payment.id
       order.paidAt = new Date()
+      if (order.status === "awaiting_payment" || order.status === "accepted") {
+        order.status = "printing"
+        order.logs.push({
+          message: "Payment captured, order moved to printing",
+          time: new Date()
+        })
+      }
       order.logs.push({
         message: "Payment captured via webhook",
         time: new Date()
@@ -85,14 +99,14 @@ export async function POST(req: Request) {
       await order.save()
 
       try {
-        await pusherServer.trigger(`user-${order.userUID}`, "order-updated", order)
+        await pusherServer.trigger(`private-user-${order.userUID}`, "order-updated", order)
       } catch (pushError) {
         console.error("PUSHER USER WEBHOOK UPDATE ERROR:", pushError)
       }
 
       try {
         if (order.supplierUID) {
-          await pusherServer.trigger(`supplier-${order.supplierUID}`, "order-updated", order)
+          await pusherServer.trigger(`private-supplier-${order.supplierUID}`, "order-updated", order)
         }
       } catch (pushError) {
         console.error("PUSHER SUPPLIER WEBHOOK UPDATE ERROR:", pushError)

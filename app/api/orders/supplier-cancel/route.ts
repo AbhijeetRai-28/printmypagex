@@ -3,16 +3,41 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendOrderCancelledNotification } from "@/lib/order-email"
+import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request){
+const auth = await authenticateSupplierRequest(req)
+if (!auth.ok) return auth.response
 
 await connectDB()
 
 const body = await req.json()
 
-const { orderId, supplierUID } = body
+const { orderId } = body
+const supplierUIDFromBody = body.supplierUID as string | undefined
+const supplierUID = auth.uid
+
+if(!orderId){
+return NextResponse.json(
+{
+success:false,
+message:"Missing order details"
+},
+{ status:400 }
+)
+}
+
+if(supplierUIDFromBody && supplierUIDFromBody !== supplierUID){
+return NextResponse.json(
+{
+success:false,
+message:"Unauthorized supplier"
+},
+{ status:403 }
+)
+}
 
 const order = await Order.findOne({
   _id: orderId
@@ -50,7 +75,7 @@ await order.save()
 /* realtime update for user */
 
 await pusherServer.trigger(
-`user-${order.userUID}`,
+`private-user-${order.userUID}`,
 "order-updated",
 order
 )

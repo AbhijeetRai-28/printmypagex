@@ -3,10 +3,16 @@ import { connectDB } from "@/lib/mongodb"
 import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { isAlphabeticText, isNumeric, normalizeText } from "@/lib/form-validation"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export async function POST(req: Request){
 
 try{
+const auth = await authenticateUserRequest(req, {
+requireProfile: false,
+requireActive: false
+})
+if (!auth.ok) return auth.response
 
 await connectDB()
 
@@ -22,6 +28,12 @@ if(!body.firebaseUID){
 return NextResponse.json({
 error: "Missing firebaseUID"
 },{ status:400 })
+}
+
+if(String(body.firebaseUID) !== auth.uid){
+return NextResponse.json({
+error: "Unauthorized UID"
+},{ status:403 })
 }
 
 if(!name || !isAlphabeticText(name)){

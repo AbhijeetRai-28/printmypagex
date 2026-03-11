@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 import { connectDB } from "@/lib/mongodb"
 import Supplier from "@/models/Supplier"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export async function POST(req:Request){
+const auth = await authenticateUserRequest(req, {
+requireProfile: false,
+requireActive: false
+})
+if (!auth.ok) return auth.response
 
 await connectDB()
 
@@ -15,6 +21,16 @@ success:false,
 message:"Missing or invalid data"
 },
 { status:400 }
+)
+}
+
+if(body.firebaseUID !== auth.uid){
+return NextResponse.json(
+{
+success:false,
+message:"Unauthorized UID"
+},
+{ status:403 }
 )
 }
 

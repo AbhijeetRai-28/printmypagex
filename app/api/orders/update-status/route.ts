@@ -3,24 +3,39 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendOrderStatusNotification } from "@/lib/order-email"
+import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req:Request){
 try{
+const auth = await authenticateSupplierRequest(req)
+if (!auth.ok) return auth.response
 
 await connectDB()
 
 const body = await req.json()
-const { orderId, status, supplierUID } = body
+const { orderId, status } = body
+const supplierUIDFromBody = body.supplierUID as string | undefined
+const supplierUID = auth.uid
 
-if(!orderId || !status || !supplierUID){
+if(!orderId || !status){
 return NextResponse.json(
 {
 success:false,
 message:"Missing update details"
 },
 { status:400 }
+)
+}
+
+if(supplierUIDFromBody && supplierUIDFromBody !== supplierUID){
+return NextResponse.json(
+{
+success:false,
+message:"Unauthorized supplier"
+},
+{ status:403 }
 )
 }
 
@@ -87,14 +102,14 @@ time:new Date()
 await order.save()
 
 try{
-await pusherServer.trigger(`user-${order.userUID}`,"order-updated",order)
+await pusherServer.trigger(`private-user-${order.userUID}`,"order-updated",order)
 }catch(pushError){
 console.error("PUSHER USER STATUS UPDATE ERROR:",pushError)
 }
 
 try{
 if(order.supplierUID){
-await pusherServer.trigger(`supplier-${order.supplierUID}`,"order-updated",order)
+await pusherServer.trigger(`private-supplier-${order.supplierUID}`,"order-updated",order)
 }
 }catch(pushError){
 console.error("PUSHER SUPPLIER STATUS UPDATE ERROR:",pushError)

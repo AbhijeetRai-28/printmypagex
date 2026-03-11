@@ -34,5 +34,8 @@ default:Date.now
 
 })
 
+SupplierSchema.index({ approved: 1, active: 1, createdAt: -1 })
+SupplierSchema.index({ active: 1, createdAt: -1 })
+
 export default mongoose.models.Supplier ||
 mongoose.model("Supplier",SupplierSchema)

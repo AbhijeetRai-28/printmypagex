@@ -3,22 +3,39 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import User from "@/models/User"
 import Supplier from "@/models/Supplier"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export async function GET(req: Request) {
   try {
+    const auth = await authenticateUserRequest(req, {
+      requireProfile: false,
+      requireActive: false
+    })
+    if (!auth.ok) return auth.response
+
     await connectDB()
 
     const { searchParams } = new URL(req.url)
     const orderId = searchParams.get("orderId")
     const userUID = searchParams.get("userUID")
 
-    if (!orderId || !userUID) {
+    if (!orderId) {
       return NextResponse.json(
         {
           success: false,
           message: "Missing receipt details"
         },
         { status: 400 }
+      )
+    }
+
+    if (userUID && userUID !== auth.uid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized receipt request"
+        },
+        { status: 403 }
       )
     }
 
@@ -34,7 +51,7 @@ export async function GET(req: Request) {
       )
     }
 
-    if (order.userUID !== userUID) {
+    if (order.userUID !== auth.uid) {
       return NextResponse.json(
         {
           success: false,

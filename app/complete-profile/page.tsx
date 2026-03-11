@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useState } from "react"
 import { auth } from "@/lib/firebase"
 import toast from "react-hot-toast"
+import { authFetch } from "@/lib/client-auth"
 
 type ProfileForm = {
   name: string
@@ -50,7 +51,7 @@ export default function CompleteProfile() {
       return
     }
 
-    const res = await fetch("/api/user/create-profile", {
+    const res = await authFetch("/api/user/create-profile", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

@@ -4,11 +4,15 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendPaymentReceivedNotifications } from "@/lib/order-email"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateUserRequest(req)
+    if (!auth.ok) return auth.response
+
     if (!process.env.RAZORPAY_KEY_SECRET) {
       return NextResponse.json(
         {
@@ -22,15 +26,15 @@ export async function POST(req: Request) {
     const body = await req.json()
     const {
       orderId,
-      userUID,
+      userUID: userUIDFromBody,
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
     } = body
+    const userUID = auth.uid
 
     if (
       !orderId ||
-      !userUID ||
       !razorpay_order_id ||
       !razorpay_payment_id ||
       !razorpay_signature
@@ -41,6 +45,16 @@ export async function POST(req: Request) {
           message: "Missing payment verification fields"
         },
         { status: 400 }
+      )
+    }
+
+    if (userUIDFromBody && userUIDFromBody !== userUID) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized verification request"
+        },
+        { status: 403 }
       )
     }
 
@@ -91,7 +105,14 @@ export async function POST(req: Request) {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex")
 
-    if (generatedSignature !== razorpay_signature) {
+    const generatedBuffer = Buffer.from(generatedSignature, "hex")
+    const receivedBuffer = Buffer.from(String(razorpay_signature), "hex")
+
+    const validSignature =
+      generatedBuffer.length === receivedBuffer.length &&
+      crypto.timingSafeEqual(generatedBuffer, receivedBuffer)
+
+    if (!validSignature) {
       return NextResponse.json(
         {
           success: false,
@@ -106,6 +127,13 @@ export async function POST(req: Request) {
     order.razorpayPaymentId = razorpay_payment_id
     order.razorpaySignature = razorpay_signature
     order.paidAt = new Date()
+    if (order.status === "awaiting_payment" || order.status === "accepted") {
+      order.status = "printing"
+      order.logs.push({
+        message: "Payment received, order moved to printing",
+        time: new Date()
+      })
+    }
     order.logs.push({
       message: "Payment verified successfully",
       time: new Date()
@@ -114,14 +142,14 @@ export async function POST(req: Request) {
     await order.save()
 
     try {
-      await pusherServer.trigger(`user-${order.userUID}`, "order-updated", order)
+      await pusherServer.trigger(`private-user-${order.userUID}`, "order-updated", order)
     } catch (pushError) {
       console.error("PUSHER USER PAYMENT UPDATE ERROR:", pushError)
     }
 
     try {
       if (order.supplierUID) {
-        await pusherServer.trigger(`supplier-${order.supplierUID}`, "order-updated", order)
+        await pusherServer.trigger(`private-supplier-${order.supplierUID}`, "order-updated", order)
       }
     } catch (pushError) {
       console.error("PUSHER SUPPLIER PAYMENT UPDATE ERROR:", pushError)

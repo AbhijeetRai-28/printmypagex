@@ -5,6 +5,7 @@ import { auth } from "@/lib/firebase"
 import Navbar from "@/components/Navbar"
 import AuthGuard from "@/components/AuthGuard"
 import toast from "react-hot-toast"
+import { authFetch } from "@/lib/client-auth"
 
 export default function CreateOrderPage() {
 
@@ -23,7 +24,7 @@ export default function CreateOrderPage() {
 
       setLoadingSuppliers(true)
 
-      fetch("/api/supplier/list")
+      authFetch("/api/supplier/list")
         .then(res => res.json())
         .then(data => {
           setSuppliers(data.suppliers || [])
@@ -59,7 +60,7 @@ export default function CreateOrderPage() {
     formData.append("requestType", requestType)
     formData.append("supplier", supplier)
 
-    const res = await fetch("/api/upload", {
+    const res = await authFetch("/api/upload", {
       method: "POST",
       body: formData
     })

@@ -136,5 +136,11 @@ const OrderSchema = new mongoose.Schema({
 
 })
 
+OrderSchema.index({ userUID: 1, createdAt: -1 })
+OrderSchema.index({ supplierUID: 1, createdAt: -1 })
+OrderSchema.index({ status: 1, requestType: 1, supplierUID: 1, createdAt: -1 })
+OrderSchema.index({ razorpayOrderId: 1 })
+OrderSchema.index({ paymentStatus: 1, paidAt: -1 })
+
 export default mongoose.models.Order ||
 mongoose.model("Order",OrderSchema)

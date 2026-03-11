@@ -8,6 +8,7 @@ import { pusherClient } from "@/lib/pusher-client"
 import toast from "react-hot-toast"
 import { onAuthStateChanged } from "firebase/auth"
 import ProfileCard from "@/components/ProfileCard"
+import { authFetch } from "@/lib/client-auth"
 
 declare global {
 interface Window {
@@ -35,7 +36,7 @@ return
 
 try{
 
-const res = await fetch(`/api/orders/user?firebaseUID=${user.uid}`)
+const res = await authFetch(`/api/orders/user?firebaseUID=${user.uid}`)
 const data = await res.json()
 
 setOrders(data.orders || [])
@@ -59,7 +60,7 @@ useEffect(()=>{
 const user = auth.currentUser
 if(!user) return
 
-const channel = pusherClient.subscribe(`user-${user.uid}`)
+const channel = pusherClient.subscribe(`private-user-${user.uid}`)
 
 channel.bind("order-updated",(updatedOrder:any)=>{
 
@@ -92,7 +93,7 @@ toast.success("Order status updated")
 })
 
 return ()=>{
-pusherClient.unsubscribe(`user-${user.uid}`)
+pusherClient.unsubscribe(`private-user-${user.uid}`)
 }
 
 },[])
@@ -126,17 +127,26 @@ return "bg-gray-500/20 text-gray-400 border border-gray-400/20"
 
 }
 
+const formatStatus = (status:string)=>
+status.replace(/_/g," ").toUpperCase()
+
 
 
 const cancelOrder = async(orderId:string)=>{
 
-await fetch("/api/orders/cancel",{
+const res = await authFetch("/api/orders/cancel",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
 },
 body:JSON.stringify({orderId})
 })
+
+if(!res.ok){
+const data = await res.json().catch(()=>({}))
+toast.error(data.message || "Failed to cancel order")
+return
+}
 
 toast.success("Order cancelled")
 
@@ -182,7 +192,7 @@ setPaying(false)
 return
 }
 
-const createRes = await fetch("/api/payment/create",{
+const createRes = await authFetch("/api/payment/create",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -210,7 +220,7 @@ description:`Payment for Order ${order._id}`,
 order_id:createData.razorpayOrderId,
 handler: async(response:any)=>{
 
-const verifyRes = await fetch("/api/payment/verify",{
+const verifyRes = await authFetch("/api/payment/verify",{
 method:"POST",
 headers:{
 "Content-Type":"application/json"
@@ -270,17 +280,36 @@ setPaying(false)
 
 }
 
-const downloadReceipt = (orderId:string)=>{
+const downloadReceipt = async(orderId:string)=>{
 const user = auth.currentUser
 if(!user){
 toast.error("Please login again")
 return
 }
 
-window.open(
-`/api/payment/receipt?orderId=${orderId}&userUID=${user.uid}`,
-"_blank"
+try{
+const res = await authFetch(
+`/api/payment/receipt?orderId=${orderId}&userUID=${user.uid}`
 )
+
+if(!res.ok){
+const data = await res.json().catch(()=>({}))
+toast.error(data.message || "Failed to download receipt")
+return
+}
+
+const blob = await res.blob()
+const url = URL.createObjectURL(blob)
+const anchor = document.createElement("a")
+anchor.href = url
+anchor.download = `receipt-${orderId}.doc`
+document.body.appendChild(anchor)
+anchor.click()
+anchor.remove()
+URL.revokeObjectURL(url)
+}catch{
+toast.error("Failed to download receipt")
+}
 }
 
 
@@ -341,7 +370,7 @@ className="bg-card p-8 rounded-3xl hover:scale-[1.02] transition shadow-xl"
 <span
 className={`px-4 py-1 text-xs rounded-full font-semibold tracking-wide ${getStatusColor(order.status)}`}
 >
-{order.status.toUpperCase()}
+{formatStatus(order.status)}
 </span>
 
 </div>
@@ -446,7 +475,7 @@ Order Details
 
 <p>Alternate Phone: {selectedOrder.alternatePhone || "None"}</p>
 
-<p>Status: {selectedOrder.status}</p>
+<p>Status: {formatStatus(selectedOrder.status)}</p>
 
 <p>Payment: {selectedOrder.paymentStatus}</p>
 
@@ -533,32 +562,38 @@ done:true
 },
 
 {
-title:"Accepted",
+title:"Accepted & Verified",
 time:selectedOrder.acceptedAt,
 done:selectedOrder.supplierUID !== null
 },
 
 {
-title:"Paid",
-time:selectedOrder.paymentStatus==="paid",
-done:selectedOrder.paymentStatus==="paid"
-},
-
-{
 title:"Awaiting Payment",
-time:selectedOrder.status==="awaiting_payment",
+time:selectedOrder.acceptedAt || null,
 done:["awaiting_payment","printing","printed","delivered"].includes(selectedOrder.status)
 },
 
 {
+title:"Paid",
+time:selectedOrder.paidAt || null,
+done:selectedOrder.paymentStatus==="paid"
+},
+
+{
+title:"Printing",
+time:selectedOrder.paidAt || null,
+done:["printing","printed","delivered"].includes(selectedOrder.status)
+},
+
+{
 title:"Printed",
-time:selectedOrder.status==="printed",
+time:null,
 done:["printed","delivered"].includes(selectedOrder.status)
 },
 
 {
 title:"Delivered",
-time:selectedOrder.status==="delivered",
+time:selectedOrder.deliveredAt || null,
 done:selectedOrder.status==="delivered"
 }
 

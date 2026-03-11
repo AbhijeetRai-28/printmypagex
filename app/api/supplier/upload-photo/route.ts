@@ -4,6 +4,7 @@ import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { v2 as cloudinary } from "cloudinary"
 import type { UploadApiResponse } from "cloudinary"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export const runtime = "nodejs"
 
@@ -15,16 +16,27 @@ cloudinary.config({
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateUserRequest(req)
+    if (!auth.ok) return auth.response
+
     await connectDB()
 
     const formData = await req.formData()
     const file = formData.get("file") as File | null
-    const firebaseUID = String(formData.get("firebaseUID") || "").trim()
+    const requestedUID = String(formData.get("firebaseUID") || "").trim()
+    const firebaseUID = auth.uid
 
-    if (!firebaseUID) {
+    if (!requestedUID) {
       return NextResponse.json(
         { success: false, message: "Missing firebaseUID" },
         { status: 400 }
+      )
+    }
+
+    if (requestedUID !== firebaseUID) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized UID" },
+        { status: 403 }
       )
     }
 

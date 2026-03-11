@@ -4,8 +4,48 @@ import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { authenticateUserRequest } from "@/lib/user-auth"
+
+type MinimalUser = {
+  firebaseUID: string
+  name?: string
+  email?: string
+  phone?: string
+  rollNo?: string
+  branch?: string
+  year?: number
+  section?: string
+  photoURL?: string
+  firebasePhotoURL?: string
+}
+
+const ORDER_SELECT_FIELDS = [
+  "userUID",
+  "supplierUID",
+  "status",
+  "paymentStatus",
+  "printType",
+  "pages",
+  "verifiedPages",
+  "estimatedPrice",
+  "finalPrice",
+  "fileURL",
+  "duplex",
+  "instruction",
+  "alternatePhone",
+  "requestType",
+  "createdAt",
+  "acceptedAt",
+  "paidAt",
+  "deliveredAt"
+].join(" ")
 
 export async function GET(req: Request) {
+  const auth = await authenticateUserRequest(req, {
+    requireProfile: false,
+    requireActive: false
+  })
+  if (!auth.ok) return auth.response
 
   await connectDB()
 
@@ -19,12 +59,20 @@ export async function GET(req: Request) {
     )
   }
 
+  if (supplierUID !== auth.uid) {
+    return NextResponse.json(
+      { error: "Unauthorized UID" },
+      { status: 403 }
+    )
+  }
+
   const supplier = await Supplier.findOne({
     firebaseUID: supplierUID
   })
+    .select("firebaseUID approved active")
+    .lean()
 
-  const user = await User.findOne({ firebaseUID: supplierUID }).select("email")
-  const ownerAccess = isOwnerEmail(user?.email)
+  const ownerAccess = isOwnerEmail(auth.email)
 
   if (!supplier && !ownerAccess) {
     return NextResponse.json({ error: "Supplier not registered" }, { status: 403 })
@@ -56,39 +104,53 @@ export async function GET(req: Request) {
 
     ]
 
-  }).sort({ createdAt: -1 })
+  })
+    .select(ORDER_SELECT_FIELDS)
+    .sort({ createdAt: -1 })
+    .lean()
 
-  const enrichedOrders = await Promise.all(
+  const userUIDs = [
+    ...new Set(
+      orders
+        .map((order) => String(order.userUID || ""))
+        .filter(Boolean)
+    )
+  ]
 
-    orders.map(async (order) => {
+  const users = (await User.find({
+    firebaseUID: { $in: userUIDs }
+  })
+    .select("firebaseUID name email phone rollNo branch year section photoURL firebasePhotoURL")
+    .lean()) as MinimalUser[]
 
-      const user = await User.findOne({
-        firebaseUID: order.userUID
-      })
+  const userMap = new Map<string, MinimalUser>()
+  users.forEach((user) => {
+    userMap.set(String(user.firebaseUID), user)
+  })
 
-      return {
-        ...order.toObject(),
-        userName: user?.name || "",
-        class: user?.section || "",
-        rollNo: user?.rollNo || "",
+  const enrichedOrders = orders.map((order) => {
+    const user = userMap.get(String(order.userUID || ""))
+
+    return {
+      ...order,
+      userName: user?.name || "",
+      class: user?.section || "",
+      rollNo: user?.rollNo || "",
+      phone: user?.phone || "",
+      userProfile: {
+        name: user?.name || "",
+        email: user?.email || "",
         phone: user?.phone || "",
-        userProfile: {
-          name: user?.name || "",
-          email: user?.email || "",
-          phone: user?.phone || "",
-          rollNo: user?.rollNo || "",
-          branch: user?.branch || "",
-          year: user?.year || "",
-          section: user?.section || "",
-          photoURL: user?.photoURL || "",
-          firebasePhotoURL: user?.firebasePhotoURL || "",
-          displayPhotoURL: (user?.photoURL || user?.firebasePhotoURL || "")
-        }
+        rollNo: user?.rollNo || "",
+        branch: user?.branch || "",
+        year: user?.year || "",
+        section: user?.section || "",
+        photoURL: user?.photoURL || "",
+        firebasePhotoURL: user?.firebasePhotoURL || "",
+        displayPhotoURL: (user?.photoURL || user?.firebasePhotoURL || "")
       }
-
-    })
-
-  )
+    }
+  })
 
   return NextResponse.json({
     success: true,

@@ -9,6 +9,7 @@ import {
   signInWithPopup,
   signOut
 } from "firebase/auth"
+import { authFetch } from "@/lib/client-auth"
 
 export default function SupplierRegister() {
   const [email, setEmail] = useState("")
@@ -19,7 +20,7 @@ export default function SupplierRegister() {
   const [successMessage, setSuccessMessage] = useState("")
 
   const syncUserEmail = async (uid: string, userEmail: string) => {
-    await fetch("/api/user/check-user", {
+    await authFetch("/api/user/check-user", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -31,7 +32,7 @@ export default function SupplierRegister() {
       })
     })
 
-    await fetch("/api/supplier/sync-email", {
+    await authFetch("/api/supplier/sync-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -45,7 +46,7 @@ export default function SupplierRegister() {
   }
 
   const routeAfterRegister = async (uid: string) => {
-    const res = await fetch(`/api/supplier/me?firebaseUID=${uid}`)
+    const res = await authFetch(`/api/supplier/me?firebaseUID=${uid}`)
     const data = await res.json()
 
     if (data.supplier) {

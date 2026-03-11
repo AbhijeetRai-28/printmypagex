@@ -1,27 +1,14 @@
-// import { NextResponse } from "next/server"
-// import razorpay from "@/lib/razorpay"
-
-// export async function POST(req:Request){
-
-// const body = await req.json()
-
-// const order = await razorpay.orders.create({
-// amount: body.amount * 100,
-// currency: "INR",
-// receipt: "receipt_"+Date.now()
-// })
-
-// return NextResponse.json(order)
-
-// }
 import { NextResponse } from "next/server"
 import Razorpay from "razorpay"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export async function POST(req: Request) {
 
   try {
+    const auth = await authenticateUserRequest(req)
+    if (!auth.ok) return auth.response
 
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       return NextResponse.json({
@@ -31,15 +18,27 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { orderId, userUID } = body
+    const orderId = body.orderId as string | undefined
+    const userUIDFromBody = body.userUID as string | undefined
+    const userUID = auth.uid
 
-    if (!orderId || !userUID) {
+    if (!orderId) {
       return NextResponse.json(
         {
           success: false,
           message: "Missing order details"
         },
         { status: 400 }
+      )
+    }
+
+    if (userUIDFromBody && userUIDFromBody !== userUID) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized payment request"
+        },
+        { status: 403 }
       )
     }
 

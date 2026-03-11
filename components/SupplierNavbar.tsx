@@ -5,6 +5,7 @@ import { auth } from "@/lib/firebase"
 import { signOut, onAuthStateChanged, type User } from "firebase/auth"
 import { useRouter, usePathname } from "next/navigation"
 import toast from "react-hot-toast"
+import { authFetch } from "@/lib/client-auth"
 
 type SupplierProfile = {
   firebaseUID: string
@@ -50,7 +51,7 @@ export default function SupplierNavbar() {
   }, [])
 
   const refreshSupplier = async (uid: string) => {
-    const res = await fetch(`/api/supplier/me?firebaseUID=${uid}`)
+    const res = await authFetch(`/api/supplier/me?firebaseUID=${uid}`)
     const data = await res.json()
     setSupplier(data.supplier || null)
   }
@@ -71,7 +72,7 @@ export default function SupplierNavbar() {
     setTogglingActive(true)
 
     try {
-      const res = await fetch("/api/supplier/toggle-active", {
+      const res = await authFetch("/api/supplier/toggle-active", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -155,7 +156,7 @@ export default function SupplierNavbar() {
         photoFormData.append("file", photoFile)
         photoFormData.append("firebaseUID", user.uid)
 
-        const photoRes = await fetch("/api/supplier/upload-photo", {
+        const photoRes = await authFetch("/api/supplier/upload-photo", {
           method: "POST",
           body: photoFormData
         })
@@ -171,7 +172,7 @@ export default function SupplierNavbar() {
         nextPhotoURL = photoData.photoURL || nextPhotoURL
       }
 
-      const res = await fetch("/api/supplier/update-profile", {
+      const res = await authFetch("/api/supplier/update-profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

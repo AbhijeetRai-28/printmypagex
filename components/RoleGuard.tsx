@@ -5,6 +5,7 @@ import { auth } from "@/lib/firebase"
 import { onAuthStateChanged, signOut } from "firebase/auth"
 import { useRouter } from "next/navigation"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { authFetch } from "@/lib/client-auth"
 
 export default function RoleGuard({
   children,
@@ -22,7 +23,7 @@ export default function RoleGuard({
     const unsubscribe = onAuthStateChanged(auth, async (user)=>{
 
       if(!user){
-        router.push("/user/login")
+        router.replace("/user/login")
         return
       }
 
@@ -33,29 +34,31 @@ export default function RoleGuard({
 
       try{
 
-        const res = await fetch(`/api/user/details?firebaseUID=${user.uid}`)
+        const res = await authFetch(`/api/user/details?firebaseUID=${user.uid}`)
         const data = await res.json()
 
         if(!data.user){
-          router.push("/")
+          await signOut(auth)
+          router.replace("/user/login")
           return
         }
 
         if(data.user.role !== role){
-          router.push("/")
+          router.replace("/user/login")
           return
         }
 
         if (data.user.active === false || data.user.approved === false) {
           await signOut(auth)
-          router.push("/user/login")
+          router.replace("/user/login")
           return
         }
 
         setLoading(false)
 
       }catch{
-        router.push("/")
+        await signOut(auth).catch(() => {})
+        router.replace("/user/login")
       }
 
     })

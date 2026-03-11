@@ -3,9 +3,13 @@ import { connectDB } from "@/lib/mongodb"
 import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { isAlphabeticText, isNumeric, normalizeText } from "@/lib/form-validation"
+import { authenticateUserRequest } from "@/lib/user-auth"
 
 export async function POST(req: Request) {
   try {
+    const auth = await authenticateUserRequest(req)
+    if (!auth.ok) return auth.response
+
     await connectDB()
 
     const body = await req.json()
@@ -16,6 +20,10 @@ export async function POST(req: Request) {
 
     if (!firebaseUID) {
       return NextResponse.json({ success: false, message: "Missing firebaseUID" }, { status: 400 })
+    }
+
+    if (firebaseUID !== auth.uid) {
+      return NextResponse.json({ success: false, message: "Unauthorized UID" }, { status: 403 })
     }
 
     if (!name || !isAlphabeticText(name)) {

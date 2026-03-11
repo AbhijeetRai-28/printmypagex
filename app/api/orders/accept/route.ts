@@ -3,17 +3,54 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
 import { pusherServer } from "@/lib/pusher-server"
-import { sendOrderAcceptedNotification } from "@/lib/order-email"
+import { sendAwaitingPaymentNotification } from "@/lib/order-email"
+import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
+  const auth = await authenticateSupplierRequest(req)
+  if (!auth.ok) return auth.response
 
   await connectDB()
 
   const body = await req.json()
 
-  const { orderId, supplierUID } = body
+  const orderId = body.orderId as string | undefined
+  const supplierUIDFromBody = body.supplierUID as string | undefined
+  const pagesValue = body.verifiedPages ?? body.pages
+  const verifiedPages = Number(pagesValue)
+  const supplierUID = auth.uid
+
+  if (!orderId) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Missing order details"
+      },
+      { status: 400 }
+    )
+  }
+
+  if (supplierUIDFromBody && supplierUIDFromBody !== supplierUID) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Unauthorized supplier"
+      },
+      { status: 403 }
+    )
+  }
+
+  if (!Number.isFinite(verifiedPages) || verifiedPages <= 0) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Verified pages must be greater than 0"
+      },
+      { status: 400 }
+    )
+  }
 
   const supplier = await Supplier.findOne({
     firebaseUID: supplierUID
@@ -49,6 +86,23 @@ export async function POST(req: Request) {
     )
   }
 
+  const orderMeta = await Order.findById(orderId).select("printType")
+  if (!orderMeta) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Order not found"
+      },
+      { status: 404 }
+    )
+  }
+
+  let pricePerPage = 2
+  if (orderMeta.printType === "color") pricePerPage = 5
+  if (orderMeta.printType === "glossy") pricePerPage = 15
+  const finalPrice = verifiedPages * pricePerPage
+  const now = new Date()
+
   const order = await Order.findOneAndUpdate(
     {
       _id: orderId,
@@ -60,12 +114,22 @@ export async function POST(req: Request) {
     },
     {
       supplierUID: supplierUID,
-      status: "accepted",
-      acceptedAt: new Date(),
+      status: "awaiting_payment",
+      acceptedAt: now,
+      verifiedPages,
+      finalPrice,
       $push: {
         logs: {
-          message: "Order accepted by supplier",
-          time: new Date()
+          $each: [
+            {
+              message: "Order accepted by supplier",
+              time: now
+            },
+            {
+              message: `Supplier verified ${verifiedPages} pages`,
+              time: now
+            }
+          ]
         }
       }
     },
@@ -79,16 +143,27 @@ export async function POST(req: Request) {
     })
   }
 
-  await pusherServer.trigger("orders", "order-accepted", {
-    orderId
-  })
+  try {
+    await pusherServer.trigger(`private-user-${order.userUID}`, "order-updated", order)
+  } catch (pushError) {
+    console.error("PUSHER USER ACCEPT UPDATE ERROR:", pushError)
+  }
 
-  sendOrderAcceptedNotification(order).catch((emailError) => {
-    console.error("ORDER_ACCEPTED_EMAIL_ERROR:", emailError)
+  try {
+    if (order.supplierUID) {
+      await pusherServer.trigger(`private-supplier-${order.supplierUID}`, "order-updated", order)
+    }
+  } catch (pushError) {
+    console.error("PUSHER SUPPLIER ACCEPT UPDATE ERROR:", pushError)
+  }
+
+  sendAwaitingPaymentNotification(order).catch((emailError) => {
+    console.error("AWAITING_PAYMENT_EMAIL_ERROR:", emailError)
   })
-  console.log("ORDER_EMAIL_DEBUG: Triggered accepted notification", {
+  console.log("ORDER_EMAIL_DEBUG: Triggered awaiting payment notification", {
     orderId: String(order._id),
-    supplierUID
+    supplierUID,
+    verifiedPages
   })
 
   return NextResponse.json({

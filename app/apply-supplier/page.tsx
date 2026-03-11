@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { auth } from "@/lib/firebase"
+import { authFetch } from "@/lib/client-auth"
 
 export default function ApplySupplier(){
 
@@ -18,7 +19,7 @@ return
 
 setLoading(true)
 
-const res = await fetch("/api/supplier/apply",{
+const res = await authFetch("/api/supplier/apply",{
 
 method:"POST",
 

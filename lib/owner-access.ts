@@ -1,4 +1,7 @@
-const FALLBACK_OWNER_EMAILS = ["abhinav1the2great3@gmail.com"]
+const FALLBACK_OWNER_EMAILS =
+  process.env.NODE_ENV === "production"
+    ? []
+    : ["abhinav1the2great3@gmail.com"]
 
 function parseEmailList(value: string) {
   return value
