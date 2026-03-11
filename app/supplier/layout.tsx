@@ -10,7 +10,7 @@ export default function SupplierLayout({
 
 return(
 
-<div className="min-h-screen bg-black text-white">
+<div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-white">
 
 <SupplierNavbar/>
 

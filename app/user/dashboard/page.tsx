@@ -56,7 +56,10 @@ export default function UserDashboard() {
 
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
 
-      if (!user) return
+      if (!user) {
+        setLoading(false)
+        return
+      }
 
       try {
 
@@ -83,9 +86,9 @@ export default function UserDashboard() {
 
       } catch (err) {
         console.error(err)
+      } finally {
+        setLoading(false)
       }
-
-      setLoading(false)
 
     })
 

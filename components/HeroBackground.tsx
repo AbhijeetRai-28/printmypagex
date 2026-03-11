@@ -10,7 +10,7 @@ return (
 <div
 data-depth="60"
 className="absolute w-[520px] h-[520px]
-bg-indigo-500/20
+bg-indigo-400/10 dark:bg-indigo-500/20
 blur-[120px]
 rounded-full
 top-[-180px]
@@ -22,7 +22,7 @@ transform-gpu"
 <div
 data-depth="80"
 className="absolute w-[520px] h-[520px]
-bg-cyan-500/20
+bg-cyan-400/10 dark:bg-cyan-500/20
 blur-[120px]
 rounded-full
 bottom-[-220px]

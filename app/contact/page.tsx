@@ -41,7 +41,7 @@ PrintMyPage
 
 <p className="mt-6 text-gray-500 dark:text-gray-400 max-w-xl mx-auto">
 
-Questions about orders, suppliers, or campus printing?  
+Questions about orders, suppliers , or some other doubt ?  
 Send us a message and we'll help you out.
 
 </p>
@@ -85,7 +85,7 @@ Email
 </h3>
 
 <p className="text-gray-500 dark:text-gray-400 break-all">
-support@printmypagepsit.store
+printmypagepsit@gmail.com
 </p>
 
 </div>
