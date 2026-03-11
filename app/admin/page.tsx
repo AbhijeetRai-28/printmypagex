@@ -179,6 +179,26 @@ type SpotlightResult = {
   meta: string
 }
 
+type WorkspaceFilter =
+  | "all"
+  | "pending"
+  | "accepted"
+  | "awaiting_payment"
+  | "printing"
+  | "printed"
+  | "delivered"
+  | "cancelled"
+  | "paid"
+  | "unpaid"
+
+type OrdersWorkspace = {
+  type: "user" | "supplier"
+  id: string
+  name: string
+  email?: string
+  photoURL?: string
+}
+
 const CHART_COLORS = ["#22d3ee", "#fb7185", "#34d399", "#f59e0b", "#818cf8", "#f87171", "#c084fc"]
 
 function getErrorMessage(error: unknown) {
@@ -256,6 +276,14 @@ function copyText(value: string) {
   navigator.clipboard.writeText(value).catch(() => {})
 }
 
+function resolveProfilePhoto(primary?: string, fallback?: string) {
+  return String(primary || fallback || "")
+}
+
+function getNameInitial(name?: string, email?: string) {
+  return String(name || email || "U").charAt(0).toUpperCase()
+}
+
 export default function AdminPortalPage() {
   const router = useRouter()
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -310,6 +338,11 @@ export default function AdminPortalPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedSupplier, setSelectedSupplier] = useState<AdminSupplier | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null)
+  const [showControlHub, setShowControlHub] = useState(false)
+
+  const [ordersWorkspace, setOrdersWorkspace] = useState<OrdersWorkspace | null>(null)
+  const [workspaceFilter, setWorkspaceFilter] = useState<WorkspaceFilter>("all")
+  const [workspaceOrderDetail, setWorkspaceOrderDetail] = useState<AdminOrder | null>(null)
 
   const adminFetch = useCallback(async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const currentUser = auth.currentUser
@@ -517,6 +550,12 @@ export default function AdminPortalPage() {
       setBusyAction("")
     }
   }
+
+  const openOrdersWorkspace = useCallback((workspace: OrdersWorkspace) => {
+    setOrdersWorkspace(workspace)
+    setWorkspaceFilter("all")
+    setWorkspaceOrderDetail(null)
+  }, [])
 
   const orderById = useMemo(() => {
     const map = new Map<string, AdminOrder>()
@@ -814,14 +853,22 @@ export default function AdminPortalPage() {
 
     const relatedOrders = userOrdersMap.get(String(selectedUser.firebaseUID)) || []
     const paidOrders = relatedOrders.filter((order) => order.paymentStatus === "paid")
+    const deliveredOrders = relatedOrders.filter((order) => order.status === "delivered")
+    const cancelledOrders = relatedOrders.filter((order) => order.status === "cancelled")
+    const activeOrders = relatedOrders.filter((order) => !["delivered", "cancelled"].includes(order.status))
+    const spend = relatedOrders.reduce(
+      (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
+      0
+    )
 
     return {
       orderCount: relatedOrders.length,
       paidCount: paidOrders.length,
-      spend: relatedOrders.reduce(
-        (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
-        0
-      ),
+      deliveredCount: deliveredOrders.length,
+      cancelledCount: cancelledOrders.length,
+      activeCount: activeOrders.length,
+      spend,
+      averageOrderValue: relatedOrders.length ? spend / relatedOrders.length : 0,
       latestOrder: relatedOrders[0] || null
     }
   }, [selectedUser, userOrdersMap])
@@ -830,15 +877,67 @@ export default function AdminPortalPage() {
     if (!selectedSupplier?.firebaseUID) return null
 
     const relatedOrders = supplierOrdersMap.get(String(selectedSupplier.firebaseUID)) || []
+    const revenue = relatedOrders.reduce(
+      (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
+      0
+    )
 
     return {
       orderCount: relatedOrders.length,
       deliveredCount: relatedOrders.filter((order) => order.status === "delivered").length,
       paidCount: relatedOrders.filter((order) => order.paymentStatus === "paid").length,
       activeOrders: relatedOrders.filter((order) => !["delivered", "cancelled"].includes(order.status)).length,
+      awaitingPaymentCount: relatedOrders.filter((order) => order.status === "awaiting_payment").length,
+      printingCount: relatedOrders.filter((order) => ["printing", "printed"].includes(order.status)).length,
+      cancelledCount: relatedOrders.filter((order) => order.status === "cancelled").length,
+      revenue,
       latestOrder: relatedOrders[0] || null
     }
   }, [selectedSupplier, supplierOrdersMap])
+
+  const workspaceOrdersBase = useMemo(() => {
+    if (!ordersWorkspace) return [] as AdminOrder[]
+
+    if (ordersWorkspace.type === "user") {
+      return userOrdersMap.get(ordersWorkspace.id) || []
+    }
+
+    return supplierOrdersMap.get(ordersWorkspace.id) || []
+  }, [ordersWorkspace, supplierOrdersMap, userOrdersMap])
+
+  const workspaceOrders = useMemo(() => {
+    if (workspaceFilter === "all") return workspaceOrdersBase
+    if (workspaceFilter === "paid") return workspaceOrdersBase.filter((order) => order.paymentStatus === "paid")
+    if (workspaceFilter === "unpaid") return workspaceOrdersBase.filter((order) => order.paymentStatus !== "paid")
+    return workspaceOrdersBase.filter((order) => order.status === workspaceFilter)
+  }, [workspaceFilter, workspaceOrdersBase])
+
+  const workspaceStats = useMemo(() => {
+    if (!workspaceOrdersBase.length) {
+      return {
+        total: 0,
+        paid: 0,
+        unpaid: 0,
+        active: 0,
+        delivered: 0,
+        cancelled: 0,
+        revenue: 0
+      }
+    }
+
+    return {
+      total: workspaceOrdersBase.length,
+      paid: workspaceOrdersBase.filter((order) => order.paymentStatus === "paid").length,
+      unpaid: workspaceOrdersBase.filter((order) => order.paymentStatus !== "paid").length,
+      active: workspaceOrdersBase.filter((order) => !["delivered", "cancelled"].includes(order.status)).length,
+      delivered: workspaceOrdersBase.filter((order) => order.status === "delivered").length,
+      cancelled: workspaceOrdersBase.filter((order) => order.status === "cancelled").length,
+      revenue: workspaceOrdersBase.reduce(
+        (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
+        0
+      )
+    }
+  }, [workspaceOrdersBase])
 
   const topCards = useMemo(() => {
     if (!overview) return []
@@ -940,7 +1039,7 @@ export default function AdminPortalPage() {
 
           <div className="hidden lg:flex items-center gap-3">
             <button
-              onClick={() => setActiveTab("overview")}
+              onClick={() => setShowControlHub(true)}
               className="group relative flex items-center gap-2 px-4 py-2 rounded-full border border-gray-300 dark:border-white/20 bg-white/80 dark:bg-white/5 backdrop-blur-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/10"
             >
               <Wrench className="w-4 h-4" />
@@ -2035,6 +2134,379 @@ export default function AdminPortalPage() {
         </div>
       </section>
 
+      {showControlHub ? (
+        <div className="fixed inset-0 z-[135]">
+          <button
+            onClick={() => setShowControlHub(false)}
+            className="absolute inset-0 bg-black/45 backdrop-blur-md"
+            aria-label="Close control hub"
+          />
+
+          <div className="relative w-[min(980px,94vw)] mt-[8vh] mx-auto rounded-3xl border border-gray-200 dark:border-white/20 bg-white/85 dark:bg-black/80 backdrop-blur-3xl shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-rose-500" />
+                  <span className="w-3 h-3 rounded-full bg-amber-400" />
+                  <span className="w-3 h-3 rounded-full bg-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Control Hub</p>
+                  <p className="text-sm font-semibold">Operator Quick Actions</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowControlHub(false)}
+                className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5">
+              <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[
+                  { label: "Auto Sync", value: autoRefresh ? "On (60s)" : "Off" },
+                  { label: "Stale Orders", value: String(staleOrders.length) },
+                  { label: "Pending Payouts", value: String(payoutRequests.filter((item) => item.status === "pending").length) },
+                  { label: "Inactive Accounts", value: String(inactiveUsers.length + inactiveSuppliers.length) }
+                ].map((card) => (
+                  <div
+                    key={card.label}
+                    className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-4"
+                  >
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
+                    <p className="text-xl font-semibold mt-1">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                <button
+                  onClick={() => {
+                    setActiveTab("orders")
+                    setOrderAssignmentFilter("unassigned")
+                    setOrderStatusFilter("pending")
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Investigate Unassigned Queue</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Pending + Unassigned orders</p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("payouts")
+                    setPayoutStatusFilter("pending")
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Review Payout Queue</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">All pending supplier payout requests</p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("suppliers")
+                    setSupplierApprovalFilter("PENDING")
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Supplier Approval Desk</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Jump to pending supplier approvals</p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("users")
+                    setUserActivityFilter("INACTIVE")
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Inactive User Audit</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Inspect all inactive users instantly</p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    refreshAll(false).catch(() => {})
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Run Full Sync</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Refresh all admin datasets now</p>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setActiveTab("overview")
+                    setShowControlHub(false)
+                  }}
+                  className="text-left rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-3 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                >
+                  <p className="font-medium">Back to Overview</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Return to command center dashboard</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {ordersWorkspace ? (
+        <div className="fixed inset-0 z-[145]">
+          <button
+            onClick={() => {
+              setOrdersWorkspace(null)
+              setWorkspaceOrderDetail(null)
+            }}
+            className="absolute inset-0 bg-black/55 backdrop-blur-md"
+            aria-label="Close order stats workspace"
+          />
+
+          <div className="relative w-[min(1240px,95vw)] mt-[6vh] mx-auto rounded-3xl border border-gray-200 dark:border-white/20 bg-white/90 dark:bg-black/85 backdrop-blur-3xl shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-rose-500" />
+                  <span className="w-3 h-3 rounded-full bg-amber-400" />
+                  <span className="w-3 h-3 rounded-full bg-emerald-400" />
+                </div>
+
+                {ordersWorkspace.photoURL ? (
+                  <img
+                    src={ordersWorkspace.photoURL}
+                    alt={ordersWorkspace.name}
+                    className="w-10 h-10 rounded-xl object-cover border border-gray-200 dark:border-white/20"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-black font-semibold">
+                    {getNameInitial(ordersWorkspace.name, ordersWorkspace.email)}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">
+                    {ordersWorkspace.type === "user" ? "User Orders" : "Supplier Orders"} Workspace
+                  </p>
+                  <p className="text-sm font-semibold">{ordersWorkspace.name}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setOrdersWorkspace(null)
+                  setWorkspaceOrderDetail(null)
+                }}
+                className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 text-sm"
+              >
+                Close Window
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid md:grid-cols-2 xl:grid-cols-6 gap-3">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total</p>
+                  <p className="text-xl font-semibold mt-1">{workspaceStats.total}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Paid</p>
+                  <p className="text-xl font-semibold mt-1">{workspaceStats.paid}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Unpaid</p>
+                  <p className="text-xl font-semibold mt-1">{workspaceStats.unpaid}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active</p>
+                  <p className="text-xl font-semibold mt-1">{workspaceStats.active}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Delivered</p>
+                  <p className="text-xl font-semibold mt-1">{workspaceStats.delivered}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/75 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Total Amount</p>
+                  <p className="text-xl font-semibold mt-1">{formatCurrency(workspaceStats.revenue)}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "pending", label: "Pending" },
+                  { key: "accepted", label: "Accepted" },
+                  { key: "awaiting_payment", label: "Awaiting Payment" },
+                  { key: "printing", label: "Printing" },
+                  { key: "printed", label: "Printed" },
+                  { key: "delivered", label: "Delivered" },
+                  { key: "cancelled", label: "Cancelled" },
+                  { key: "paid", label: "Paid" },
+                  { key: "unpaid", label: "Unpaid" }
+                ].map((filter) => (
+                  <button
+                    key={filter.key}
+                    onClick={() => setWorkspaceFilter(filter.key as WorkspaceFilter)}
+                    className={`px-3 py-1.5 rounded-full border text-xs ${
+                      workspaceFilter === filter.key
+                        ? "bg-gradient-to-r from-indigo-500 to-cyan-500 border-transparent text-white"
+                        : "border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[52vh] overflow-y-auto pr-1">
+                {workspaceOrders.map((order) => (
+                  <div
+                    key={`workspace-${order._id}`}
+                    className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/85 dark:bg-white/5 p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-sm">{String(order._id).slice(-10)}</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-300">{formatDateTime(order.createdAt)}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-[11px] ${getStatusBadge(order.status)}`}>
+                        {formatStatus(order.status)}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1 text-gray-600 dark:text-gray-300">
+                      <p>User: {order.user?.name || order.userUID}</p>
+                      <p>Supplier: {order.supplier?.name || order.supplierUID || "Unassigned"}</p>
+                      <p>Print: {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages</p>
+                      <p>Amount: {formatCurrency(order.finalPrice ?? order.estimatedPrice)}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setWorkspaceOrderDetail(order)}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 text-xs"
+                      >
+                        Open Details
+                      </button>
+                      {order.fileURL ? (
+                        <a
+                          href={order.fileURL}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 text-xs"
+                        >
+                          File
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+
+                {workspaceOrders.length === 0 ? (
+                  <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-gray-200 dark:border-white/10 bg-white/85 dark:bg-white/5 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No orders found for this filter.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {workspaceOrderDetail ? (
+        <div className="fixed inset-0 z-[155]">
+          <button
+            onClick={() => setWorkspaceOrderDetail(null)}
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            aria-label="Close workspace order details"
+          />
+
+          <div className="relative w-[min(880px,94vw)] mt-[10vh] mx-auto rounded-3xl border border-gray-200 dark:border-white/20 bg-white/92 dark:bg-black/88 backdrop-blur-3xl shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-rose-500" />
+                  <span className="w-3 h-3 rounded-full bg-amber-400" />
+                  <span className="w-3 h-3 rounded-full bg-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Order Window</p>
+                  <p className="text-sm font-semibold">Detailed Order Diagnostics</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setWorkspaceOrderDetail(null)}
+                className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/70 dark:bg-white/5 text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-5 grid md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Order ID</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail._id}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Lifecycle</p>
+                  <p className="font-semibold mt-1">{formatStatus(workspaceOrderDetail.status)} • {formatStatus(workspaceOrderDetail.paymentStatus)}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Pricing</p>
+                  <p className="font-semibold mt-1">{formatCurrency(workspaceOrderDetail.finalPrice ?? workspaceOrderDetail.estimatedPrice)}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Pages</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail.verifiedPages ?? workspaceOrderDetail.pages ?? 0}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">User</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail.user?.name || workspaceOrderDetail.userUID}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300">{workspaceOrderDetail.user?.email || workspaceOrderDetail.userUID}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Supplier</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail.supplier?.name || workspaceOrderDetail.supplierUID || "Unassigned"}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Timestamps</p>
+                  <p>Created: {formatDateTime(workspaceOrderDetail.createdAt)}</p>
+                  <p>Paid: {formatDateTime(workspaceOrderDetail.paidAt || "")}</p>
+                  <p>Delivered: {formatDateTime(workspaceOrderDetail.deliveredAt || "")}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Instructions</p>
+                  <p className="font-medium mt-1">{workspaceOrderDetail.instruction || "-"}</p>
+                </div>
+
+                {workspaceOrderDetail.fileURL ? (
+                  <a
+                    href={workspaceOrderDetail.fileURL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10"
+                  >
+                    Open Uploaded File
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {selectedUser ? (
         <div className="fixed inset-0 z-[120]">
           <button
@@ -2045,10 +2517,24 @@ export default function AdminPortalPage() {
 
           <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-white/85 dark:bg-black/85 backdrop-blur-3xl border-l border-gray-200 dark:border-white/10 p-6 overflow-y-auto">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">User Profile</p>
-                <h3 className="text-2xl font-semibold mt-2">{selectedUser.name || "Unknown user"}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedUser.email || selectedUser.firebaseUID}</p>
+              <div className="flex items-center gap-3">
+                {resolveProfilePhoto(selectedUser.photoURL, selectedUser.firebasePhotoURL) ? (
+                  <img
+                    src={resolveProfilePhoto(selectedUser.photoURL, selectedUser.firebasePhotoURL)}
+                    alt={selectedUser.name || "User"}
+                    className="w-16 h-16 rounded-2xl object-cover border border-gray-200 dark:border-white/20"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-black font-bold text-xl">
+                    {getNameInitial(selectedUser.name, selectedUser.email)}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">User Profile</p>
+                  <h3 className="text-2xl font-semibold mt-1">{selectedUser.name || "Unknown user"}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedUser.email || selectedUser.firebaseUID}</p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedUser(null)}
@@ -2087,6 +2573,22 @@ export default function AdminPortalPage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Paid Orders</p>
                   <p className="font-semibold mt-1">{userPanelMetrics.paidCount}</p>
                 </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Orders</p>
+                  <p className="font-semibold mt-1">{userPanelMetrics.activeCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Delivered</p>
+                  <p className="font-semibold mt-1">{userPanelMetrics.deliveredCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cancelled</p>
+                  <p className="font-semibold mt-1">{userPanelMetrics.cancelledCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Avg Order Value</p>
+                  <p className="font-semibold mt-1">{formatCurrency(userPanelMetrics.averageOrderValue)}</p>
+                </div>
                 <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 col-span-2">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total Spend</p>
                   <p className="font-semibold mt-1">{formatCurrency(userPanelMetrics.spend)}</p>
@@ -2100,6 +2602,20 @@ export default function AdminPortalPage() {
               <div className="flex flex-wrap gap-2">
                 {selectedUser.firebaseUID ? (
                   <>
+                    <button
+                      onClick={() =>
+                        openOrdersWorkspace({
+                          type: "user",
+                          id: selectedUser.firebaseUID!,
+                          name: selectedUser.name || "User",
+                          email: selectedUser.email || "",
+                          photoURL: resolveProfilePhoto(selectedUser.photoURL, selectedUser.firebasePhotoURL)
+                        })
+                      }
+                      className="px-3 py-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-500 dark:text-cyan-200 text-sm"
+                    >
+                      Order Stats Window
+                    </button>
                     <button
                       onClick={() => runUserAction(selectedUser.firebaseUID!, "approve")}
                       disabled={busyAction === `approve-${selectedUser.firebaseUID}`}
@@ -2155,10 +2671,24 @@ export default function AdminPortalPage() {
 
           <aside className="absolute right-0 top-0 h-full w-full max-w-xl bg-white/85 dark:bg-black/85 backdrop-blur-3xl border-l border-gray-200 dark:border-white/10 p-6 overflow-y-auto">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Supplier Profile</p>
-                <h3 className="text-2xl font-semibold mt-2">{selectedSupplier.name || "Unknown supplier"}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedSupplier.email || selectedSupplier.firebaseUID}</p>
+              <div className="flex items-center gap-3">
+                {resolveProfilePhoto(selectedSupplier.photoURL, selectedSupplier.firebasePhotoURL) ? (
+                  <img
+                    src={resolveProfilePhoto(selectedSupplier.photoURL, selectedSupplier.firebasePhotoURL)}
+                    alt={selectedSupplier.name || "Supplier"}
+                    className="w-16 h-16 rounded-2xl object-cover border border-gray-200 dark:border-white/20"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-black font-bold text-xl">
+                    {getNameInitial(selectedSupplier.name, selectedSupplier.email)}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-indigo-500 dark:text-cyan-300">Supplier Profile</p>
+                  <h3 className="text-2xl font-semibold mt-1">{selectedSupplier.name || "Unknown supplier"}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 break-all">{selectedSupplier.email || selectedSupplier.firebaseUID}</p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedSupplier(null)}
@@ -2205,6 +2735,22 @@ export default function AdminPortalPage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Paid Orders</p>
                   <p className="font-semibold mt-1">{supplierPanelMetrics.paidCount}</p>
                 </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Awaiting Payment</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.awaitingPaymentCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">In Print</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.printingCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cancelled</p>
+                  <p className="font-semibold mt-1">{supplierPanelMetrics.cancelledCount}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Order Revenue</p>
+                  <p className="font-semibold mt-1">{formatCurrency(supplierPanelMetrics.revenue)}</p>
+                </div>
               </div>
             ) : null}
 
@@ -2224,6 +2770,20 @@ export default function AdminPortalPage() {
               <div className="flex flex-wrap gap-2">
                 {selectedSupplier.firebaseUID ? (
                   <>
+                    <button
+                      onClick={() =>
+                        openOrdersWorkspace({
+                          type: "supplier",
+                          id: selectedSupplier.firebaseUID!,
+                          name: selectedSupplier.name || "Supplier",
+                          email: selectedSupplier.email || "",
+                          photoURL: resolveProfilePhoto(selectedSupplier.photoURL, selectedSupplier.firebasePhotoURL)
+                        })
+                      }
+                      className="px-3 py-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-500 dark:text-cyan-200 text-sm"
+                    >
+                      Order Stats Window
+                    </button>
                     <button
                       onClick={() => runSupplierAction(selectedSupplier.firebaseUID!, "approve")}
                       disabled={busyAction === `approve-${selectedSupplier.firebaseUID}`}
