@@ -28,7 +28,13 @@ export async function GET(req: Request) {
         orderCount: { $sum: 1 },
         totalSpent: {
           $sum: {
-            $cond: [{ $ifNull: ["$finalPrice", false] }, "$finalPrice", "$estimatedPrice"]
+            $cond: [
+              { $eq: ["$paymentStatus", "paid"] },
+              {
+                $cond: [{ $ifNull: ["$finalPrice", false] }, "$finalPrice", "$estimatedPrice"]
+              },
+              0
+            ]
           }
         },
         paidCount: {

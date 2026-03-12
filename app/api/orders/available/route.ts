@@ -5,6 +5,7 @@ import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { isOwnerEmail } from "@/lib/owner-access"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 type MinimalUser = {
   firebaseUID: string
@@ -85,6 +86,8 @@ export async function GET(req: Request) {
   if (!ownerAccess && !supplier?.active) {
     return NextResponse.json({ error: "Supplier inactive" }, { status: 403 })
   }
+
+  await applyOrderLifecycleRules()
 
   const orders = await Order.find({
 

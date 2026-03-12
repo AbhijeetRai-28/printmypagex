@@ -121,6 +121,8 @@ type AdminOrder = {
   verifiedPages?: number | null
   estimatedPrice?: number
   finalPrice?: number | null
+  discountPercent?: number
+  discountAmount?: number
   paymentStatus: "unpaid" | "paid" | string
   razorpayOrderId?: string | null
   razorpayPaymentId?: string | null
@@ -284,6 +286,19 @@ function getNameInitial(name?: string, email?: string) {
   return String(name || email || "U").charAt(0).toUpperCase()
 }
 
+function getOrderStatusOptions(paymentStatus: string, currentStatus?: string) {
+  const options =
+    paymentStatus === "paid"
+      ? ["printing", "printed", "delivered", "cancelled"]
+      : ["pending", "accepted", "awaiting_payment", "cancelled"]
+
+  if (currentStatus && !options.includes(currentStatus)) {
+    return [currentStatus, ...options]
+  }
+
+  return options
+}
+
 export default function AdminPortalPage() {
   const router = useRouter()
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -338,6 +353,14 @@ export default function AdminPortalPage() {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedSupplier, setSelectedSupplier] = useState<AdminSupplier | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null)
+  const [orderEditForm, setOrderEditForm] = useState({
+    status: "",
+    verifiedPages: "",
+    finalPrice: "",
+    discountPercent: "",
+    discountAmount: "",
+    note: ""
+  })
   const [showControlHub, setShowControlHub] = useState(false)
 
   const [ordersWorkspace, setOrdersWorkspace] = useState<OrdersWorkspace | null>(null)
@@ -461,6 +484,29 @@ export default function AdminPortalPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (!selectedOrder) {
+      setOrderEditForm({
+        status: "",
+        verifiedPages: "",
+        finalPrice: "",
+        discountPercent: "",
+        discountAmount: "",
+        note: ""
+      })
+      return
+    }
+
+    setOrderEditForm({
+      status: String(selectedOrder.status || ""),
+      verifiedPages: String(selectedOrder.verifiedPages ?? selectedOrder.pages ?? ""),
+      finalPrice: String(selectedOrder.finalPrice ?? selectedOrder.estimatedPrice ?? ""),
+      discountPercent: selectedOrder.discountPercent ? String(selectedOrder.discountPercent) : "",
+      discountAmount: selectedOrder.discountAmount ? String(selectedOrder.discountAmount) : "",
+      note: ""
+    })
+  }, [selectedOrder])
+
   const logout = async () => {
     await signOut(auth)
     window.location.href = "/admin/login"
@@ -518,6 +564,124 @@ export default function AdminPortalPage() {
       await loadAll()
       setMessage(`Payout request ${action}d successfully`)
       setPayoutNotes((prev) => ({ ...prev, [requestId]: "" }))
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError))
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  const runOrderUpdate = async () => {
+    if (!selectedOrder) return
+
+    const payload: Record<string, unknown> = {
+      orderId: selectedOrder._id
+    }
+
+    if (orderEditForm.status && orderEditForm.status !== selectedOrder.status) {
+      payload.status = orderEditForm.status
+    }
+
+    const paymentDone = selectedOrder.paymentStatus === "paid"
+
+    if (!paymentDone) {
+      const currentPages = Number(selectedOrder.verifiedPages ?? selectedOrder.pages ?? 0)
+      const currentAmount = Number(selectedOrder.finalPrice ?? selectedOrder.estimatedPrice ?? 0)
+      const currentDiscountPercent = Number(selectedOrder.discountPercent || 0)
+      const currentDiscountAmount = Number(selectedOrder.discountAmount || 0)
+
+      const pagesText = orderEditForm.verifiedPages.trim()
+      if (pagesText) {
+        const parsedPages = Number(pagesText)
+        if (!Number.isInteger(parsedPages) || parsedPages < 1) {
+          setError("Verified pages must be a whole number greater than 0")
+          return
+        }
+
+        if (parsedPages !== currentPages) {
+          payload.verifiedPages = parsedPages
+        }
+      }
+
+      const finalPriceText = orderEditForm.finalPrice.trim()
+      if (finalPriceText) {
+        const parsedFinalPrice = Number(finalPriceText)
+        if (!Number.isFinite(parsedFinalPrice) || parsedFinalPrice <= 0) {
+          setError("Final amount must be greater than 0")
+          return
+        }
+
+        if (parsedFinalPrice !== currentAmount) {
+          payload.finalPrice = parsedFinalPrice
+        }
+      }
+
+      const discountPercentText = orderEditForm.discountPercent.trim()
+      const discountAmountText = orderEditForm.discountAmount.trim()
+
+      if (discountPercentText && discountAmountText) {
+        setError("Use either discount percent or discount amount, not both")
+        return
+      }
+
+      if (discountPercentText) {
+        const parsedDiscountPercent = Number(discountPercentText)
+        if (!Number.isFinite(parsedDiscountPercent) || parsedDiscountPercent < 0 || parsedDiscountPercent > 100) {
+          setError("Discount percent must be between 0 and 100")
+          return
+        }
+
+        if (parsedDiscountPercent !== currentDiscountPercent) {
+          payload.discountPercent = parsedDiscountPercent
+        }
+      }
+
+      if (discountAmountText) {
+        const parsedDiscountAmount = Number(discountAmountText)
+        if (!Number.isFinite(parsedDiscountAmount) || parsedDiscountAmount < 0) {
+          setError("Discount amount must be 0 or greater")
+          return
+        }
+
+        if (parsedDiscountAmount !== currentDiscountAmount) {
+          payload.discountAmount = parsedDiscountAmount
+        }
+      }
+    }
+
+    const trimmedNote = orderEditForm.note.trim()
+    if (trimmedNote) {
+      payload.note = trimmedNote
+    }
+
+    if (Object.keys(payload).length === 1) {
+      setMessage("No order changes to save")
+      return
+    }
+
+    try {
+      setBusyAction(`order-update-${selectedOrder._id}`)
+      setError("")
+
+      const response = await adminFetch<{ success: boolean; message?: string; order: AdminOrder }>(
+        "/api/admin/orders",
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        }
+      )
+
+      const updatedOrder = response.order
+
+      setOrders((prev) =>
+        prev.map((item) => (item._id === updatedOrder._id ? updatedOrder : item))
+      )
+      setSelectedOrder(updatedOrder)
+      setWorkspaceOrderDetail((prev) =>
+        prev && prev._id === updatedOrder._id ? updatedOrder : prev
+      )
+
+      setMessage(response.message || "Order updated successfully")
     } catch (caughtError) {
       setError(getErrorMessage(caughtError))
     } finally {
@@ -856,7 +1020,7 @@ export default function AdminPortalPage() {
     const deliveredOrders = relatedOrders.filter((order) => order.status === "delivered")
     const cancelledOrders = relatedOrders.filter((order) => order.status === "cancelled")
     const activeOrders = relatedOrders.filter((order) => !["delivered", "cancelled"].includes(order.status))
-    const spend = relatedOrders.reduce(
+    const spend = paidOrders.reduce(
       (sum, order) => sum + Number(order.finalPrice ?? order.estimatedPrice ?? 0),
       0
     )
@@ -2875,6 +3039,137 @@ export default function AdminPortalPage() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">Amount</p>
                 <p className="font-semibold mt-1">{formatCurrency(selectedOrder.finalPrice ?? selectedOrder.estimatedPrice)}</p>
               </div>
+            </div>
+
+            <div className="mt-5 space-y-3 rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-4">
+              <div>
+                <p className="text-sm font-semibold">Order Controls</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {selectedOrder.paymentStatus === "paid"
+                    ? "Paid order: status can be managed, pricing is locked."
+                    : "Unpaid order: status, page count, amount, and discount can be managed."}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-gray-500 dark:text-gray-400">
+                  Status
+                  <select
+                    value={orderEditForm.status}
+                    onChange={(event) =>
+                      setOrderEditForm((prev) => ({
+                        ...prev,
+                        status: event.target.value
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  >
+                    {getOrderStatusOptions(selectedOrder.paymentStatus, orderEditForm.status || selectedOrder.status).map((status) => (
+                      <option key={status} value={status}>
+                        {formatStatus(status)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs text-gray-500 dark:text-gray-400">
+                  Verified Pages
+                  <input
+                    type="number"
+                    min="1"
+                    value={orderEditForm.verifiedPages}
+                    disabled={selectedOrder.paymentStatus === "paid"}
+                    onChange={(event) =>
+                      setOrderEditForm((prev) => ({
+                        ...prev,
+                        verifiedPages: event.target.value
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 dark:text-white"
+                  />
+                </label>
+
+                <label className="text-xs text-gray-500 dark:text-gray-400">
+                  Final Amount (INR)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={orderEditForm.finalPrice}
+                    disabled={selectedOrder.paymentStatus === "paid"}
+                    onChange={(event) =>
+                      setOrderEditForm((prev) => ({
+                        ...prev,
+                        finalPrice: event.target.value
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 dark:text-white"
+                  />
+                </label>
+
+                <label className="text-xs text-gray-500 dark:text-gray-400">
+                  Discount %
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={orderEditForm.discountPercent}
+                    disabled={selectedOrder.paymentStatus === "paid"}
+                    onChange={(event) =>
+                      setOrderEditForm((prev) => ({
+                        ...prev,
+                        discountPercent: event.target.value,
+                        discountAmount: event.target.value ? "" : prev.discountAmount
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 dark:text-white"
+                  />
+                </label>
+
+                <label className="text-xs text-gray-500 dark:text-gray-400 col-span-2">
+                  Discount Amount (INR)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={orderEditForm.discountAmount}
+                    disabled={selectedOrder.paymentStatus === "paid"}
+                    onChange={(event) =>
+                      setOrderEditForm((prev) => ({
+                        ...prev,
+                        discountAmount: event.target.value,
+                        discountPercent: event.target.value ? "" : prev.discountPercent
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 dark:text-white"
+                  />
+                </label>
+              </div>
+
+              <label className="text-xs text-gray-500 dark:text-gray-400">
+                Admin Note
+                <textarea
+                  value={orderEditForm.note}
+                  onChange={(event) =>
+                    setOrderEditForm((prev) => ({
+                      ...prev,
+                      note: event.target.value
+                    }))
+                  }
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/30 px-3 py-2 text-sm text-gray-900 dark:text-white"
+                  placeholder="Optional note for order log"
+                />
+              </label>
+
+              <button
+                onClick={runOrderUpdate}
+                disabled={busyAction === `order-update-${selectedOrder._id}`}
+                className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {busyAction === `order-update-${selectedOrder._id}` ? "Saving..." : "Save Order Changes"}
+              </button>
             </div>
 
             <div className="mt-5 space-y-3 text-sm">

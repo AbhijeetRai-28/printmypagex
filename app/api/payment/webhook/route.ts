@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendPaymentReceivedNotifications } from "@/lib/order-email"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export const runtime = "nodejs"
 
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
     }
 
     await connectDB()
+    await applyOrderLifecycleRules()
 
     const order = await Order.findOne({
       razorpayOrderId: payment.order_id
@@ -79,6 +81,15 @@ export async function POST(req: Request) {
 
     if (!order) {
       return NextResponse.json({ success: true, message: "Order not found, ignored" })
+    }
+
+    if (order.status === "cancelled" && order.paymentStatus !== "paid") {
+      order.logs.push({
+        message: "Payment webhook ignored because order was already cancelled",
+        time: new Date()
+      })
+      await order.save()
+      return NextResponse.json({ success: true, message: "Cancelled order payment ignored" })
     }
 
     if (order.paymentStatus !== "paid") {

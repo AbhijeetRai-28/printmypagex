@@ -3,10 +3,13 @@ import { authenticateAdminRequest } from "@/lib/admin-auth"
 import User from "@/models/User"
 import Supplier from "@/models/Supplier"
 import Order from "@/models/Order"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export async function GET(req: Request) {
   const auth = await authenticateAdminRequest(req)
   if (!auth.ok) return auth.response
+
+  await applyOrderLifecycleRules()
 
   const [
     totalUsers,

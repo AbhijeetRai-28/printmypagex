@@ -5,6 +5,7 @@ import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendPaymentReceivedNotifications } from "@/lib/order-email"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export const runtime = "nodejs"
 
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
     }
 
     await connectDB()
+    await applyOrderLifecycleRules({ userUID })
 
     const order = await Order.findById(orderId)
 
@@ -88,6 +90,16 @@ export async function POST(req: Request) {
         message: "Order already paid",
         order
       })
+    }
+
+    if (order.status === "cancelled") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Order is cancelled and payment cannot be verified"
+        },
+        { status: 409 }
+      )
     }
 
     if (order.razorpayOrderId && order.razorpayOrderId !== razorpay_order_id) {

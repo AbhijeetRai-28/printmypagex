@@ -3,6 +3,7 @@ import Razorpay from "razorpay"
 import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export async function POST(req: Request) {
 
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     }
 
     await connectDB()
+    await applyOrderLifecycleRules({ userUID })
 
     const dbOrder = await Order.findById(orderId)
 
@@ -71,6 +73,16 @@ export async function POST(req: Request) {
         {
           success: false,
           message: "Order already paid"
+        },
+        { status: 409 }
+      )
+    }
+
+    if (dbOrder.status === "cancelled") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Order is cancelled and cannot be paid"
         },
         { status: 409 }
       )

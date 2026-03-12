@@ -368,10 +368,13 @@ export default function UserDashboard() {
 
   const totalOrders=orders.length
   const pending=orders.filter(o=>o.status==="pending").length
-  const completed=orders.filter(o=>o.status==="completed").length
+  const completed=orders.filter(o=>o.status==="delivered").length
 
   const totalSpent=orders.reduce(
-    (acc,o)=>acc+(o.finalPrice||o.estimatedPrice||0),0
+    (acc,o)=>o.paymentStatus==="paid"
+      ? acc + (o.finalPrice || o.estimatedPrice || 0)
+      : acc,
+    0
   )
 
   if(loading) return null

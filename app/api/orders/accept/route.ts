@@ -5,6 +5,7 @@ import Supplier from "@/models/Supplier"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export const runtime = "nodejs"
 
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
   if (!auth.ok) return auth.response
 
   await connectDB()
+  await applyOrderLifecycleRules()
 
   const body = await req.json()
 

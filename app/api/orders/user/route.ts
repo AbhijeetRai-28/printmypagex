@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb"
 import Order from "@/models/Order"
 import Supplier from "@/models/Supplier"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 type MinimalSupplier = {
   firebaseUID: string
@@ -65,23 +66,7 @@ export async function GET(req: Request) {
       }, { status: 403 })
     }
 
-    const normalizeTime = new Date()
-    await Order.updateMany(
-      {
-        userUID: firebaseUID,
-        paymentStatus: "paid",
-        status: { $in: ["awaiting_payment", "accepted"] }
-      },
-      {
-        $set: { status: "printing" },
-        $push: {
-          logs: {
-            message: "Auto-moved to printing because payment is completed",
-            time: normalizeTime
-          }
-        }
-      }
-    )
+    await applyOrderLifecycleRules({ userUID: firebaseUID })
 
     const orders = await Order.find({
       userUID: firebaseUID

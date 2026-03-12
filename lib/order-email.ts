@@ -269,7 +269,10 @@ export async function sendOrderStatusNotification(order: OrderEmailData, status:
   })
 }
 
-export async function sendOrderCancelledNotification(order: OrderEmailData, cancelledBy: "user" | "supplier") {
+export async function sendOrderCancelledNotification(
+  order: OrderEmailData,
+  cancelledBy: "user" | "supplier" | "admin" | "system"
+) {
   console.log("ORDER_EMAIL_DEBUG: Event=order_cancelled", {
     orderId: String(order._id),
     cancelledBy

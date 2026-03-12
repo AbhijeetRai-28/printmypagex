@@ -5,6 +5,7 @@ import User from "@/models/User"
 import Supplier from "@/models/Supplier"
 import { isOwnerEmail } from "@/lib/owner-access"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 type MinimalUser = {
 firebaseUID: string
@@ -85,23 +86,7 @@ message:"Supplier is not approved/active"
 },{ status:403 })
 }
 
-const normalizeTime = new Date()
-await Order.updateMany(
-{
-supplierUID,
-paymentStatus:"paid",
-status:{ $in:["awaiting_payment","accepted"] }
-},
-{
-$set:{ status:"printing" },
-$push:{
-logs:{
-message:"Auto-moved to printing because payment is completed",
-time:normalizeTime
-}
-}
-}
-)
+await applyOrderLifecycleRules({ supplierUID })
 
 const orders = await Order.find({
 supplierUID

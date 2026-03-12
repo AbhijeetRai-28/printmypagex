@@ -4,6 +4,7 @@ import Order from "@/models/Order"
 import { pusherServer } from "@/lib/pusher-server"
 import { sendOrderStatusNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
+import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
 
 export const runtime = "nodejs"
 
@@ -11,13 +12,14 @@ export async function POST(req:Request){
 try{
 const auth = await authenticateSupplierRequest(req)
 if (!auth.ok) return auth.response
+const supplierUID = auth.uid
 
 await connectDB()
+await applyOrderLifecycleRules({ supplierUID })
 
 const body = await req.json()
 const { orderId, status } = body
 const supplierUIDFromBody = body.supplierUID as string | undefined
-const supplierUID = auth.uid
 
 if(!orderId || !status){
 return NextResponse.json(

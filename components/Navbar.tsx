@@ -6,6 +6,7 @@ import { signOut, onAuthStateChanged, User } from "firebase/auth"
 import { useRouter } from "next/navigation"
 import ProfileCard from "@/components/ProfileCard"
 import CandleThemeToggle from "@/components/CandleThemeToggle"
+import { authFetch } from "@/lib/client-auth"
 
 type NavbarButtonVariant = "glass" | "accent" | "back" | "contact" | "orders" | "dashboardBack"
 
@@ -24,6 +25,19 @@ interface NavbarProps {
   onProfileClick?: () => void
   showOrdersMenuItem?: boolean
   showSpacer?: boolean
+}
+
+type NavbarProfileData = {
+  name?: string
+  email?: string
+  phone?: string
+  rollNo?: string
+  branch?: string
+  section?: string
+  year?: string | number
+  photoURL?: string
+  firebasePhotoURL?: string
+  displayPhotoURL?: string
 }
 
 const defaultNavButtons: NavbarButton[] = [
@@ -54,20 +68,93 @@ export default function Navbar({
   const [open, setOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
+  const [profileData, setProfileData] = useState<NavbarProfileData | null>(null)
   const [showProfile, setShowProfile] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
+      if (!nextUser) {
+        setProfileData(null)
+      }
     })
 
     return () => unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+
+    let active = true
+
+    const loadProfile = async () => {
+      try {
+        const res = await authFetch(`/api/user/details?firebaseUID=${user.uid}`)
+        const data = (await res.json()) as { user?: NavbarProfileData }
+
+        if (!active) return
+
+        if (res.ok && data?.user) {
+          setProfileData(data.user)
+          return
+        }
+      } catch (error) {
+        console.error("NAVBAR_PROFILE_LOAD_ERROR:", error)
+      }
+
+      if (!active) return
+
+      setProfileData({
+        name: user.displayName || "",
+        email: user.email || "",
+        phone: user.phoneNumber || "",
+        displayPhotoURL: user.photoURL || ""
+      })
+    }
+
+    loadProfile()
+
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  const resolvedProfile: NavbarProfileData | null = user
+    ? {
+        name: profileData?.name || user.displayName || "User",
+        email: profileData?.email || user.email || "",
+        phone: profileData?.phone || user.phoneNumber || "",
+        rollNo: profileData?.rollNo || "",
+        branch: profileData?.branch || "",
+        section: profileData?.section || "",
+        year: profileData?.year || "",
+        photoURL: profileData?.photoURL || "",
+        firebasePhotoURL: profileData?.firebasePhotoURL || "",
+        displayPhotoURL:
+          profileData?.displayPhotoURL ||
+          profileData?.photoURL ||
+          profileData?.firebasePhotoURL ||
+          user.photoURL ||
+          ""
+      }
+    : null
+
   const userInitial =
+    resolvedProfile?.name?.charAt(0)?.toUpperCase() ||
+    resolvedProfile?.email?.charAt(0)?.toUpperCase() ||
     user?.displayName?.charAt(0)?.toUpperCase() ||
     user?.email?.charAt(0)?.toUpperCase() ||
     "U"
+
+  const avatarPhotoURL = String(
+    resolvedProfile?.displayPhotoURL ||
+      resolvedProfile?.photoURL ||
+      resolvedProfile?.firebasePhotoURL ||
+      user?.photoURL ||
+      ""
+  )
 
   const logout = async () => {
     await signOut(auth)
@@ -377,10 +464,19 @@ export default function Navbar({
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setOpen((prev) => !prev)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-cyan-500 text-sm font-bold text-black shadow-lg transition hover:scale-105"
+                  className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-indigo-500 to-cyan-500 text-sm font-bold text-black shadow-lg transition hover:scale-105"
                   aria-label="Open profile menu"
                 >
-                  {userInitial}
+                  {avatarPhotoURL ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={avatarPhotoURL}
+                      alt={resolvedProfile?.name || "User"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    userInitial
+                  )}
                 </button>
 
                 {open ? (
@@ -438,7 +534,7 @@ export default function Navbar({
         </nav>
       </div>
 
-      {showProfile && user ? (
+      {showProfile && user && resolvedProfile ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <button
             className="absolute inset-0 bg-black/40 backdrop-blur-md"
@@ -449,16 +545,7 @@ export default function Navbar({
           <div className="relative z-10 w-[520px] max-w-[95%] animate-[scale-in_0.9s_ease]">
             <ProfileCard
               title="My Profile"
-              profile={{
-                name: user.displayName || "User",
-                email: user.email || "",
-                phone: user.phoneNumber || "",
-                rollNo: "2301640100018",
-                branch: "CSE",
-                section: "CS3C",
-                year: "3",
-                displayPhotoURL: user.photoURL || ""
-              }}
+              profile={resolvedProfile}
             />
           </div>
         </div>
