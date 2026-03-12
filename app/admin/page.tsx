@@ -36,8 +36,9 @@ import { auth } from "@/lib/firebase"
 import CandleThemeToggle from "@/components/CandleThemeToggle"
 import HeroBackground from "@/components/HeroBackground"
 import CursorDepth from "@/components/CursorDepth"
+import FeedbackPanel, { type AdminFeedback } from "@/components/admin/FeedbackPanel"
 
-type Tab = "overview" | "users" | "suppliers" | "orders" | "payments" | "payouts" | "danger"
+type Tab = "overview" | "users" | "suppliers" | "orders" | "payments" | "payouts" | "feedback" | "danger"
 
 type OverviewResponse = {
   stats: {
@@ -316,6 +317,7 @@ export default function AdminPortalPage() {
   const [orders, setOrders] = useState<AdminOrder[]>([])
   const [payments, setPayments] = useState<PaymentLog[]>([])
   const [payoutRequests, setPayoutRequests] = useState<AdminPayoutRequest[]>([])
+  const [feedbacks, setFeedbacks] = useState<AdminFeedback[]>([])
 
   const [adminEmail, setAdminEmail] = useState("")
   const [menuOpen, setMenuOpen] = useState(false)
@@ -398,13 +400,14 @@ export default function AdminPortalPage() {
   }, [])
 
   const loadAll = useCallback(async () => {
-    const [overviewRes, usersRes, suppliersRes, ordersRes, paymentsRes, payoutsRes] = await Promise.all([
+    const [overviewRes, usersRes, suppliersRes, ordersRes, paymentsRes, payoutsRes, feedbacksRes] = await Promise.all([
       adminFetch<OverviewResponse>("/api/admin/overview"),
       adminFetch<{ users: AdminUser[] }>("/api/admin/users"),
       adminFetch<{ suppliers: AdminSupplier[] }>("/api/admin/suppliers"),
       adminFetch<{ orders: AdminOrder[] }>("/api/admin/orders"),
       adminFetch<{ payments: PaymentLog[] }>("/api/admin/payments"),
-      adminFetch<{ requests: AdminPayoutRequest[] }>("/api/admin/payout-requests")
+      adminFetch<{ requests: AdminPayoutRequest[] }>("/api/admin/payout-requests"),
+      adminFetch<{ feedbacks: AdminFeedback[] }>("/api/admin/feedback")
     ])
 
     setOverview(overviewRes)
@@ -413,6 +416,7 @@ export default function AdminPortalPage() {
     setOrders(ordersRes.orders || [])
     setPayments(paymentsRes.payments || [])
     setPayoutRequests(payoutsRes.requests || [])
+    setFeedbacks(feedbacksRes.feedbacks || [])
     setLastSyncedAt(new Date())
   }, [adminFetch])
 
@@ -1172,6 +1176,7 @@ export default function AdminPortalPage() {
     { value: "orders", label: "Orders" },
     { value: "payments", label: "Payments" },
     { value: "payouts", label: "Payouts" },
+    { value: "feedback", label: "Feedback" },
     { value: "danger", label: "Danger" }
   ]
 
@@ -2256,6 +2261,10 @@ export default function AdminPortalPage() {
                 </table>
               </div>
             </div>
+          ) : null}
+
+          {activeTab === "feedback" ? (
+            <FeedbackPanel feedbacks={feedbacks} />
           ) : null}
 
           {activeTab === "danger" ? (

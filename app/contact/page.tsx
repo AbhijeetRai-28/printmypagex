@@ -5,12 +5,24 @@ import ContactFormCard from "@/components/ContactFormCard"
 import CreatorFooter from "@/components/CreatorFooter"
 
 export default function ContactPage(){
+const contactNavButtons = [
+  {
+    label: "Pricing",
+    href: "/pricing",
+    variant: "glass" as const
+  },
+  {
+    label: "Feedback",
+    href: "/feedback",
+    variant: "contact" as const
+  }
+]
 
 return(
 
 <div className="min-h-screen bg-transparent dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
 
-<Navbar/>
+<Navbar navButtons={contactNavButtons}/>
 
 {/* background glow */}
 
@@ -42,7 +54,7 @@ PrintMyPage
 <p className="mt-6 text-gray-500 dark:text-gray-400 max-w-xl mx-auto">
 
 Questions about orders, suppliers , or some other doubt ?  
-Send us a message and we'll help you out.
+Send us a message and we&apos;ll help you out.
 
 </p>
 
