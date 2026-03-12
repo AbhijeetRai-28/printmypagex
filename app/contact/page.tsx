@@ -8,7 +8,7 @@ export default function ContactPage(){
 
 return(
 
-<div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
+<div className="min-h-screen bg-transparent dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
 
 <Navbar/>
 

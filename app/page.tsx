@@ -11,7 +11,7 @@ export default function Home(){
 
 return(
 
-<main className="bg-white dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
+<main className="bg-transparent dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
 
 <SmoothScroll/>
 <CursorDepth/>
@@ -19,11 +19,11 @@ return(
 
 {/* HERO */}
 
-<section className="relative py-40 text-center px-6">
+<section className="relative px-6 py-24 text-center sm:py-32 md:py-40">
 
 <HeroBackground/>
 
-<h1 className="relative text-6xl md:text-7xl font-bold">
+<h1 className="relative text-4xl font-bold leading-tight sm:text-6xl md:text-7xl">
 
 Your Campus Print Partner
 
@@ -37,22 +37,22 @@ Fast. Simple. Reliable.
 
 </h1>
 
-<p className="mt-6 text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
+<p className="mx-auto mt-6 max-w-xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
 Upload your documents today, pick up your prints tomorrow on campus.
 </p>
 
-<div className="mt-10 flex justify-center gap-6 flex-wrap">
+<div className="mt-10 flex flex-wrap justify-center gap-4 sm:gap-6">
 
 <Link
 href="/user/dashboard"
-className="px-8 py-4 rounded-2xl backdrop-blur-xl bg-white/70 dark:bg-white/10 border border-white/20 hover:scale-105 transition"
+className="rounded-2xl border border-white/20 bg-white/70 px-6 py-3 backdrop-blur-xl transition hover:scale-105 dark:bg-white/10 sm:px-8 sm:py-4"
 >
 Start Printing
 </Link>
 
 <Link
 href="/supplier"
-className="px-8 py-4 rounded-2xl border border-white/20 backdrop-blur-xl hover:bg-indigo-500 hover:text-white transition"
+className="rounded-2xl border border-white/20 px-6 py-3 backdrop-blur-xl transition hover:bg-indigo-500 hover:text-white sm:px-8 sm:py-4"
 >
 Become Supplier
 </Link>
@@ -64,13 +64,13 @@ Become Supplier
 
 {/* FEATURES */}
 
-<section className="py-32">
+<section className="py-20 md:py-32">
 
-<h2 className="text-4xl font-bold text-center mb-20">
+<h2 className="mb-14 text-center text-3xl font-bold md:mb-20 md:text-4xl">
 Why PrintMyPage
 </h2>
 
-<div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-10 px-6">
+<div className="mx-auto grid max-w-6xl gap-8 px-6 md:grid-cols-3 md:gap-10">
 
 <FeatureCard
 title="Instant Matching"
@@ -102,13 +102,13 @@ direction="right"
 
 {/* PRICING */}
 
-<section className="py-32">
+<section className="py-20 md:py-32">
 
-<h2 className="text-4xl font-bold text-center mb-16">
+<h2 className="mb-12 text-center text-3xl font-bold md:mb-16 md:text-4xl">
 Pricing
 </h2>
 
-<div className="flex justify-center gap-10 flex-wrap">
+<div className="flex flex-wrap justify-center gap-6 md:gap-10">
 
 {[
 {type:"Black & White",price:"₹2/page"},
@@ -118,7 +118,7 @@ Pricing
 
 <div
 key={i}
-className="backdrop-blur-xl bg-white/60 dark:bg-white/5 border border-gray-200 dark:border-white/20 rounded-3xl p-10 w-64 text-center shadow-xl hover:scale-105 transition"
+className="w-full max-w-[16rem] rounded-3xl border border-gray-200 bg-white/60 p-7 text-center shadow-xl backdrop-blur-xl transition hover:scale-105 dark:border-white/20 dark:bg-white/5 sm:p-10 md:w-64"
 >
 
 <h3 className="text-xl font-semibold mb-3">
@@ -140,9 +140,9 @@ className="backdrop-blur-xl bg-white/60 dark:bg-white/5 border border-gray-200 d
 
 {/* CTA */}
 
-<section className="py-40 text-center">
+<section className="py-24 text-center md:py-40">
 
-<h2 className="text-4xl font-bold mb-6">
+<h2 className="mb-6 text-3xl font-bold md:text-4xl">
 Start Printing Today
 </h2>
 
@@ -152,7 +152,7 @@ Fast campus printing in seconds.
 
 <Link
 href="/user/dashboard"
-className="px-10 py-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white hover:scale-105 transition"
+className="rounded-2xl bg-gradient-to-r from-indigo-500 to-cyan-500 px-8 py-3 text-white transition hover:scale-105 sm:px-10 sm:py-4"
 >
 Create Order
 </Link>

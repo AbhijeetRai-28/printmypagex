@@ -23,7 +23,7 @@ return ()=>unsub()
 
 return(
 
-<main className="bg-white dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
+<main className="bg-transparent dark:bg-black text-gray-900 dark:text-white overflow-x-hidden">
 
 <ScrollParallax/>
 
@@ -31,9 +31,9 @@ return(
 
 <section className="relative py-40 px-6 text-center
 bg-gradient-to-b
-from-white
-via-white
-to-slate-100
+from-sky-50
+via-indigo-50/40
+to-cyan-50/60
 dark:from-black
 dark:via-black
 dark:to-black">

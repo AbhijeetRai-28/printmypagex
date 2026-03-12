@@ -376,14 +376,14 @@ displayOrders = Array.from(map.values())
 
 return(
 <SupplierGuard>
-<div className="px-6 md:px-20 xl:px-32 py-16">
+<div className="px-4 sm:px-6 md:px-20 xl:px-32 py-10 md:py-16">
 
-<h1 className="text-4xl font-bold mb-14 text-gradient">
+<h1 className="text-3xl md:text-4xl font-bold mb-8 md:mb-14 text-gradient">
 Supplier Orders
 </h1>
 
 
-<div className="flex gap-4 mb-12 flex-wrap">
+<div className="flex gap-2 sm:gap-3 mb-8 md:mb-12 flex-wrap">
 
 {[
 ["pending","Pending"],
@@ -401,8 +401,8 @@ key={key}
 onClick={()=>setFilter(key)}
 className={`px-5 py-2 rounded-xl border transition ${
 filter===key
-? "bg-indigo-500/20 border-indigo-400 text-indigo-300"
-: "border-white/10 text-gray-400 hover:text-white"
+? "bg-indigo-500/20 border-indigo-400 text-indigo-600 dark:text-indigo-300"
+: "border-gray-300 text-gray-600 hover:text-gray-900 dark:border-white/10 dark:text-gray-400 dark:hover:text-white"
 }`}
 >
 {label}
@@ -415,13 +415,13 @@ filter===key
 
 {!loading &&(
 
-<div className="bg-card p-10 rounded-3xl mb-16 shadow-xl border border-white/10">
+<div className="bg-card p-6 sm:p-8 md:p-10 rounded-3xl mb-10 md:mb-16 shadow-xl">
 
-<p className="text-gray-400 text-sm">
+<p className="text-gray-500 dark:text-gray-400 text-sm">
 Total Orders
 </p>
 
-<h2 className="text-5xl font-bold mt-2 text-gradient">
+<h2 className="text-4xl md:text-5xl font-bold mt-2 text-gradient">
 {displayOrders.length}
 </h2>
 
@@ -430,13 +430,13 @@ Total Orders
 )}
 
 
-<div className="grid lg:grid-cols-2 gap-12">
+<div className="grid md:grid-cols-2 gap-5 sm:gap-8 lg:gap-12">
 
 {displayOrders.map(order=>(
 
 <div
 key={order._id}
-className="bg-card p-10 rounded-3xl border border-white/10 hover:scale-[1.02] transition shadow-xl"
+className="bg-card p-5 sm:p-7 md:p-10 rounded-3xl hover:scale-[1.02] transition shadow-xl"
 >
 
 <div className="flex justify-between items-center mb-6">
@@ -454,25 +454,25 @@ className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getSt
 </div>
 
 
-<div className="space-y-3 text-gray-300 text-sm">
+<div className="space-y-3 text-gray-600 dark:text-gray-300 text-sm">
 
 <div className="flex justify-between">
 <span>Pages</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 {order.verifiedPages || order.pages}
 </span>
 </div>
 
 <div className="flex justify-between">
 <span>Amount</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 ₹{order.finalPrice ?? order.estimatedPrice}
 </span>
 </div>
 
 <div className="flex justify-between">
 <span>Payment</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 {order.paymentStatus.toUpperCase()}
 </span>
 </div>
@@ -490,7 +490,7 @@ className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getSt
 </div>
 
 
-<div className="flex items-center gap-6 mt-6">
+<div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-6">
 
 <button
 onClick={()=>{
@@ -502,7 +502,7 @@ className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
 View Details →
 </button>
 
-<div className="flex gap-4">
+<div className="flex flex-wrap gap-3 sm:gap-4">
 
 {order.status==="pending" &&(
 
@@ -568,11 +568,11 @@ Cancel
 
 {selectedOrder &&(
 
-<div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50">
+<div className="fixed inset-0 z-50 bg-black/70 flex justify-center items-center p-4">
 
-<div className="bg-card w-full max-w-5xl p-10 rounded-3xl shadow-2xl border border-white/10">
+<div className="bg-card w-full max-w-5xl p-4 sm:p-6 md:p-10 rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
 
-<div className="grid md:grid-cols-2 gap-12">
+<div className="grid md:grid-cols-2 gap-8 md:gap-12">
 
 
 <div className="space-y-4 text-sm">
@@ -599,7 +599,7 @@ Pages:
 type="number"
 value={verifiedPages}
 onChange={(e)=>setVerifiedPages(Number(e.target.value))}
-className="ml-3 bg-black border border-white/20 px-2 py-1 w-20 rounded"
+className="ml-3 w-20 rounded bg-white/80 dark:bg-black border border-gray-300 dark:border-white/20 px-2 py-1 text-gray-900 dark:text-white"
 />
 </p>
 
@@ -684,7 +684,7 @@ ${active
 }`}
 />
 
-<p className={`${active?"text-white":"text-gray-400"}`}>
+<p className={`${active?"text-gray-900 dark:text-white":"text-gray-500 dark:text-gray-400"}`}>
 {step.title}
 </p>
 
@@ -701,7 +701,7 @@ ${active
 </div>
 
 
-<div className="flex gap-4 mt-8">
+<div className="mt-8 flex flex-wrap gap-3 sm:gap-4">
 
 {selectedOrder.status==="pending" &&(
 <button
@@ -775,13 +775,13 @@ Close
 
 {showAcceptConfirm && selectedOrder && (
 <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-md flex items-center justify-center p-4">
-<div className="w-full max-w-md rounded-3xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-[0_12px_50px_rgba(0,0,0,0.45)] p-7">
-<h3 className="text-xl font-semibold text-white mb-3">
+<div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-white/20 bg-slate-100/95 dark:bg-white/10 backdrop-blur-xl shadow-[0_12px_50px_rgba(0,0,0,0.45)] p-7">
+<h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-3">
 Confirm Page Verification
 </h3>
-<p className="text-gray-200 text-sm leading-relaxed">
+<p className="text-slate-600 dark:text-gray-200 text-sm leading-relaxed">
 Have you verified the page count carefully? This will accept the order with{" "}
-<span className="font-semibold text-white">{verifiedPages}</span> pages and move it to payment.
+<span className="font-semibold text-slate-900 dark:text-white">{verifiedPages}</span> pages and move it to payment.
 </p>
 
 <div className="flex gap-3 mt-6">
@@ -797,7 +797,7 @@ Yes, Accept
 
 <button
 onClick={()=>setShowAcceptConfirm(false)}
-className="flex-1 bg-white/15 hover:bg-white/25 transition border border-white/20 px-4 py-2 rounded-xl font-semibold text-white"
+className="flex-1 bg-slate-200/80 hover:bg-slate-300/80 dark:bg-white/15 dark:hover:bg-white/25 transition border border-slate-300 dark:border-white/20 px-4 py-2 rounded-xl font-semibold text-slate-800 dark:text-white"
 >
 No, Recheck
 </button>

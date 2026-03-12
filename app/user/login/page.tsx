@@ -181,16 +181,32 @@ export default function UserLogin() {
   }
 
   return (
-    <div>
-      <Navbar />
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-sky-100 dark:from-black dark:via-[#0f0f1a] dark:to-[#12122a]">
+      <Navbar
+        logoHref="/"
+        navButtons={[
+          {
+            label: "Back Home",
+            href: "/",
+            variant: "back"
+          },
+          {
+            label: "Create Account",
+            href: "/user/register",
+            variant: "accent"
+          }
+        ]}
+        hideGuestAuthButtons
+        showOrdersMenuItem={false}
+      />
 
-      <div className="flex justify-center items-center min-h-[80vh]">
-        <div className="bg-card p-10 rounded-2xl w-96 text-center shadow-lg">
+      <div className="flex items-center justify-center px-6 pb-16">
+        <div className="bg-card w-full max-w-md rounded-3xl p-10 text-center shadow-xl">
           <h1 className="text-3xl font-bold mb-6">User Login</h1>
 
           <form onSubmit={handleEmailLogin} className="space-y-4 text-left">
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Email</label>
+              <label className="mb-1 block text-sm text-gray-500 dark:text-gray-400">Email</label>
               <input
                 type="email"
                 value={email}
@@ -203,7 +219,7 @@ export default function UserLogin() {
             </div>
 
             <div>
-              <label className="text-sm text-gray-400 mb-1 block">Password</label>
+              <label className="mb-1 block text-sm text-gray-500 dark:text-gray-400">Password</label>
               <input
                 type="password"
                 value={password}
@@ -231,7 +247,7 @@ export default function UserLogin() {
               type="button"
               onClick={handleForgotPassword}
               disabled={loading !== null}
-              className="w-full py-2 text-sm text-gray-300 hover:text-white disabled:opacity-60"
+              className="w-full py-2 text-sm text-gray-600 transition hover:text-gray-900 disabled:opacity-60 dark:text-gray-300 dark:hover:text-white"
             >
               Forgot Password?
             </button>
@@ -240,7 +256,7 @@ export default function UserLogin() {
               type="button"
               onClick={handleResendVerification}
               disabled={loading !== null}
-              className="w-full py-2 text-sm text-gray-300 hover:text-white disabled:opacity-60"
+              className="w-full py-2 text-sm text-gray-600 transition hover:text-gray-900 disabled:opacity-60 dark:text-gray-300 dark:hover:text-white"
             >
               Resend Verification Email
             </button>

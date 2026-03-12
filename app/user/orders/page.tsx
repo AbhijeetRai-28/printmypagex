@@ -322,12 +322,23 @@ return(
 
 <AuthGuard>
 
-<Navbar/>
+<div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-sky-100 text-gray-900 dark:from-black dark:via-[#0f0f1a] dark:to-[#12122a] dark:text-white">
 
-<div className="px-6 md:px-16 py-16">
+<Navbar
+logoHref="/"
+navButtons={[
+{
+label:"Back to Dashboard",
+href:"/user/dashboard",
+variant:"dashboardBack"
+}
+]}
+/>
+
+<div className="px-4 sm:px-6 md:px-16 py-10 md:py-16">
 
 
-<h1 className="text-4xl font-bold mb-10 text-gradient">
+<h1 className="text-3xl md:text-4xl font-bold mb-8 md:mb-10 text-gradient">
 My Orders
 </h1>
 
@@ -335,13 +346,13 @@ My Orders
 
 {!loading &&(
 
-<div className="bg-card p-10 rounded-3xl mb-12 shadow-xl">
+<div className="bg-card p-5 sm:p-7 md:p-10 rounded-3xl mb-10 md:mb-12 shadow-xl">
 
 <p className="text-gray-400 text-sm">
 Total Orders
 </p>
 
-<h2 className="text-5xl font-bold mt-2 text-gradient">
+<h2 className="text-4xl md:text-5xl font-bold mt-2 text-gradient">
 {totalOrders}
 </h2>
 
@@ -351,13 +362,13 @@ Total Orders
 
 
 
-<div className="grid md:grid-cols-2 gap-8">
+<div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
 
 {orders.map(order=>(
 
 <div
 key={order._id}
-className="bg-card p-8 rounded-3xl hover:scale-[1.02] transition shadow-xl"
+className="bg-card p-5 sm:p-6 md:p-8 rounded-3xl hover:scale-[1.02] transition shadow-xl"
 >
 
 
@@ -376,25 +387,25 @@ className={`px-4 py-1 text-xs rounded-full font-semibold tracking-wide ${getStat
 </div>
 
 
-<div className="space-y-3 text-gray-300 text-sm">
+<div className="space-y-3 text-gray-600 dark:text-gray-300 text-sm">
 
 <div className="flex justify-between">
 <span>Pages</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 {order.verifiedPages || order.pages}
 </span>
 </div>
 
 <div className="flex justify-between">
 <span>Amount</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 ₹{order.finalPrice ?? order.estimatedPrice}
 </span>
 </div>
 
 <div className="flex justify-between">
 <span>Payment</span>
-<span className="font-semibold text-white">
+<span className="font-semibold text-gray-900 dark:text-white">
 {order.paymentStatus.toUpperCase()}
 </span>
 </div>
@@ -447,10 +458,10 @@ className="mt-4 w-full bg-green-500 px-4 py-2 rounded-xl font-semibold disabled:
 <div className="fixed inset-0 bg-black/70 flex justify-center items-center z-50 p-4">
 
 
-<div className="bg-card w-full max-w-5xl p-8 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+<div className="bg-card w-full max-w-5xl p-4 sm:p-6 md:p-8 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
 
 
-<div className="grid md:grid-cols-2 gap-12">
+<div className="grid md:grid-cols-2 gap-8 md:gap-12">
 
 
 {/* LEFT DETAILS */}
@@ -547,7 +558,7 @@ View Uploaded File
 
 <div>
 
-<h3 className="text-xl font-semibold mb-8">
+<h3 className="text-xl font-semibold mb-6 md:mb-8">
 Order Timeline
 </h3>
 
@@ -616,7 +627,7 @@ ${active
 
 <div>
 
-<p className={`${active?"text-white":"text-gray-400"}`}>
+<p className={`${active?"text-gray-900 dark:text-white":"text-gray-500 dark:text-gray-400"}`}>
 {step.title}
 </p>
 
@@ -644,7 +655,7 @@ ${active
 
 
 
-<div className="flex gap-4 mt-10">
+<div className="mt-8 flex flex-wrap gap-3 md:mt-10 md:gap-4">
 
 {selectedOrder.paymentStatus==="unpaid" &&
 selectedOrder.status!=="cancelled" &&(
@@ -713,6 +724,8 @@ Close Supplier Card
 </div>
 </div>
 )}
+
+</div>
 
 </div>
 

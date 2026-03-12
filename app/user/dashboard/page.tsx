@@ -3,7 +3,7 @@
 import RoleGuard from "@/components/RoleGuard"
 import { useEffect, useRef, useState } from "react"
 import { auth } from "@/lib/firebase"
-import DashboardNavbar from "@/components/DashboardNavbar"
+import Navbar from "@/components/Navbar"
 import toast from "react-hot-toast"
 import { authFetch } from "@/lib/client-auth"
 import {
@@ -380,18 +380,26 @@ export default function UserDashboard() {
 
 <RoleGuard role="USER">
 
-<div className="min-h-screen bg-gradient-to-br from-black via-[#0f0f1a] to-[#12122a] text-white">
+<div className="min-h-screen bg-gradient-to-br from-slate-100 via-white to-sky-100 text-gray-900 dark:from-black dark:via-[#0f0f1a] dark:to-[#12122a] dark:text-white">
 
-<DashboardNavbar
-orderCount={totalOrders}
+<Navbar
+logoHref="/"
+navButtons={[
+{
+label:"My Orders",
+href:"/user/orders",
+variant:"orders",
+badge:totalOrders
+}
+]}
 onProfileClick={openProfileModal}
 />
 
-<div className="px-6 md:px-16 py-14 space-y-16">
+<div className="px-4 sm:px-6 md:px-16 py-10 md:py-14 space-y-10 md:space-y-16">
 
 {/* STATS */}
 
-<div className="grid md:grid-cols-4 gap-8">
+<div className="grid gap-4 sm:gap-6 md:grid-cols-4 md:gap-8">
 
 {[
 {label:"Total Orders",value:totalOrders},
@@ -402,11 +410,11 @@ onProfileClick={openProfileModal}
 
 <div
 key={i}
-className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl"
+className="bg-card p-5 sm:p-6 md:p-8 rounded-3xl shadow-2xl"
 >
 
 <p className="text-gray-400 text-sm mb-2">{stat.label}</p>
-<h2 className="text-4xl font-bold">{stat.value}</h2>
+<h2 className="text-3xl md:text-4xl font-bold">{stat.value}</h2>
 
 </div>
 
@@ -416,7 +424,7 @@ className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-3xl sh
 
 {/* CREATE ORDER */}
 
-<div className="bg-white/5 backdrop-blur-xl border border-white/10 p-10 rounded-3xl shadow-xl">
+<div className="bg-card backdrop-blur-none p-5 sm:p-7 md:p-10 rounded-3xl shadow-xl">
 
 <h2 className="text-2xl font-semibold mb-6">
 Create New Order
@@ -559,7 +567,7 @@ className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hov
 
 {/* ORDER ACTIVITY */}
 
-<div className="bg-white/5 backdrop-blur-xl border border-white/10 p-10 rounded-3xl shadow-xl">
+<div className="bg-card p-5 sm:p-7 md:p-10 rounded-3xl shadow-xl">
 
 <h2 className="text-2xl font-semibold mb-6">
 Order Activity
@@ -575,7 +583,7 @@ onClick={()=>setDuration(d)}
 className={`px-4 py-2 rounded-lg border ${
 duration===d
 ?"bg-indigo-500 border-indigo-500"
-:"border-white/20 text-gray-300"
+:"border-gray-300 text-gray-600 dark:border-white/20 dark:text-gray-300"
 }`}
 >
 {d.toUpperCase()}
@@ -627,7 +635,7 @@ fillOpacity={0.25}
 
 <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
 
-<div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10 w-full max-w-[560px] relative">
+<div className="bg-card rounded-3xl p-5 sm:p-8 md:p-10 w-full max-w-[560px] relative">
 
 <button
 onClick={()=>setShowProfile(false)}
@@ -665,7 +673,7 @@ className="input w-full"
 </div>
 )}
 
-<div className="space-y-4 text-gray-300">
+<div className="space-y-4 text-gray-700 dark:text-gray-300">
 <div>
 <p className="text-gray-400">Name</p>
 <input

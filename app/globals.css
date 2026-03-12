@@ -3,11 +3,20 @@
 @tailwind utilities;
 
 body {
-  @apply bg-white dark:bg-[#0b0f19] text-gray-900 dark:text-white;
+  @apply bg-sky-50 dark:bg-[#0b0f19] text-slate-900 dark:text-white;
+  background-image:
+    radial-gradient(circle at 10% 8%, rgba(99, 102, 241, 0.16), transparent 36%),
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, 0.12), transparent 34%),
+    linear-gradient(180deg, #f8fbff 0%, #f2f7ff 45%, #eef5ff 100%);
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-image: none;
 }
 
 .bg-card {
-  @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  @apply bg-white/90 dark:bg-white/5 backdrop-blur-xl border border-slate-200/85 dark:border-white/10;
 }
 
 .bg-primary {
@@ -20,9 +29,8 @@ body {
   -webkit-text-fill-color: transparent;
 }
 .input {
-  @apply bg-black/40 border border-white/10 rounded-xl p-3;
+  @apply bg-white/95 dark:bg-black/40 text-slate-900 dark:text-white border border-slate-300/80 dark:border-white/10 rounded-xl p-3;
 }
 *{
 transition: background-color 0.2s ease, color 0.2s ease;
 }
-
