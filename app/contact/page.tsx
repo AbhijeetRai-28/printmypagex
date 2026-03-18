@@ -109,12 +109,12 @@ Campus Pickup
 
 <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
 
-CS3C – CS3H (Hidden Goals)
+CS-3C
 
 <br/>
 
 No fixed location 😅  
-Usually sprinting between lectures trying to secure the last bench seat.
+Usually sprinting between lectures trying to secure the last bench.
 
 </p>
 
