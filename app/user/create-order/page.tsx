@@ -8,6 +8,7 @@ import toast from "react-hot-toast"
 import { authFetch, authUploadWithProgress } from "@/lib/client-auth"
 import {
   isAcceptedUploadFile,
+  isPdfUploadFile,
   requiresManualPageCount,
   UPLOAD_ACCEPT_ATTRIBUTE
 } from "@/lib/upload-file"
@@ -29,8 +30,10 @@ type UploadProgressState = {
 
 type UploadResponseData = {
   error?: string
+  code?: string
   estimatedPrice?: number
   pages?: number
+  requiresPdfPassword?: boolean
 }
 
 function formatBytes(bytes: number) {
@@ -66,6 +69,8 @@ export default function CreateOrderPage() {
   const [requestType, setRequestType] = useState("global")
   const [supplier, setSupplier] = useState("")
   const [pageCount, setPageCount] = useState("")
+  const [pdfPassword, setPdfPassword] = useState("")
+  const [needsPdfPassword, setNeedsPdfPassword] = useState(false)
   const [instruction, setInstruction] = useState("")
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -96,6 +101,8 @@ export default function CreateOrderPage() {
   }, [uploadStartedAt])
 
   const uploadPercent = getUploadProgressPercent(uploadProgress)
+  const isPdfFile = isPdfUploadFile(file)
+  const showPdfPasswordField = isPdfFile && (needsPdfPassword || pdfPassword.length > 0)
 
   useEffect(() => {
     let active = true
@@ -159,6 +166,11 @@ export default function CreateOrderPage() {
       manualPageCount = String(parsedPageCount)
     }
 
+    if (isPdfFile && needsPdfPassword && !pdfPassword) {
+      toast.error("Enter the PDF password to continue with this locked file.")
+      return
+    }
+
     const user = auth.currentUser
 
     if (!user) return
@@ -194,6 +206,10 @@ export default function CreateOrderPage() {
 
     if (manualPageCount) {
       formData.append("pageCount", manualPageCount)
+    }
+
+    if (isPdfFile && pdfPassword) {
+      formData.append("pdfPassword", pdfPassword)
     }
 
     try {
@@ -255,6 +271,9 @@ export default function CreateOrderPage() {
       const data = await res.json() as UploadResponseData
 
       if (!res.ok || data.error) {
+        if (data.requiresPdfPassword) {
+          setNeedsPdfPassword(true)
+        }
         toast.error(data.error || "Upload failed")
         return
       }
@@ -262,6 +281,8 @@ export default function CreateOrderPage() {
       toast.success(`Pages: ${data.pages} | Estimated Price: ₹${data.estimatedPrice}`)
       setFile(null)
       setPageCount("")
+      setPdfPassword("")
+      setNeedsPdfPassword(false)
       setInstruction("")
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
@@ -322,6 +343,8 @@ export default function CreateOrderPage() {
                 onChange={(e) => {
                   const selectedFile = e.target.files?.[0] || null
                   setFile(selectedFile)
+                  setPdfPassword("")
+                  setNeedsPdfPassword(false)
 
                   if (!requiresManualPageCount(selectedFile)) {
                     setPageCount("")
@@ -352,6 +375,30 @@ export default function CreateOrderPage() {
                   Required for DOC and DOCX because page count is entered manually.
                 </p>
               </div>
+            )}
+
+            {showPdfPasswordField && (
+              <div>
+                <label className="block mb-2 text-sm text-gray-400">
+                  PDF Password
+                </label>
+                <input
+                  type="password"
+                  value={pdfPassword}
+                  onChange={(e) => setPdfPassword(e.target.value)}
+                  placeholder="Enter the password used to open this PDF"
+                  className="w-full bg-dark p-3 rounded-lg border border-gray-700"
+                />
+                <p className="mt-2 text-xs text-gray-400">
+                  We use this only to read the real page count and store it with the order so the supplier can open the locked PDF.
+                </p>
+              </div>
+            )}
+
+            {isPdfFile && !showPdfPasswordField && (
+              <p className="text-xs text-gray-400">
+                If this PDF is locked, submit once and we will ask for the password before creating the order.
+              </p>
             )}
 
             <div>

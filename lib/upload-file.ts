@@ -21,6 +21,8 @@ const MANUAL_PAGE_COUNT_MIME_TYPES = [
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ] as const
+const PDF_UPLOAD_EXTENSIONS = [".pdf"] as const
+const PDF_UPLOAD_MIME_TYPES = ["application/pdf"] as const
 
 export const UPLOAD_ACCEPT_ATTRIBUTE = ACCEPTED_UPLOAD_EXTENSIONS.join(",")
 
@@ -52,5 +54,16 @@ export function requiresManualPageCount(file: Pick<File, "name" | "type"> | null
   return (
     MANUAL_PAGE_COUNT_MIME_TYPES.includes(file.type as (typeof MANUAL_PAGE_COUNT_MIME_TYPES)[number]) ||
     MANUAL_PAGE_COUNT_EXTENSIONS.includes(extension as (typeof MANUAL_PAGE_COUNT_EXTENSIONS)[number])
+  )
+}
+
+export function isPdfUploadFile(file: Pick<File, "name" | "type"> | null) {
+  if (!file) return false
+
+  const extension = getFileExtension(file.name)
+
+  return (
+    PDF_UPLOAD_MIME_TYPES.includes(file.type as (typeof PDF_UPLOAD_MIME_TYPES)[number]) ||
+    PDF_UPLOAD_EXTENSIONS.includes(extension as (typeof PDF_UPLOAD_EXTENSIONS)[number])
   )
 }

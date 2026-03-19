@@ -32,6 +32,8 @@ type SupplierOrderDetail = {
   duplex?: boolean
   instruction?: string
   alternatePhone?: string
+  pdfPasswordRequired?: boolean
+  pdfPassword?: string
   userProfile?: {
     name?: string
     email?: string
@@ -640,6 +642,16 @@ Final Price: ₹{selectedOrder.finalPrice}
 <p>Instruction: {selectedOrder.instruction?.trim() || "None"}</p>
 
 <p>Alternate Phone: {selectedOrder.alternatePhone?.trim() || "None"}</p>
+
+{selectedOrder.pdfPasswordRequired ? (
+selectedOrder.pdfPassword ? (
+<p>PDF Password: {selectedOrder.pdfPassword}</p>
+) : (
+<p className="text-amber-400">
+This PDF is locked. Accept the order to reveal the password and open the file.
+</p>
+)
+) : null}
 
 <p>Status: {formatStatus(selectedOrder.status)}</p>
 <p>Payment: {selectedOrder.paymentStatus}</p>

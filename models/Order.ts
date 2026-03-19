@@ -38,6 +38,16 @@ const OrderSchema = new mongoose.Schema({
     required:true
   },
 
+  pdfPasswordRequired:{
+    type:Boolean,
+    default:false
+  },
+
+  pdfPassword:{
+    type:String,
+    default:""
+  },
+
   pages:{
     type:Number,
     required:true

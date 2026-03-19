@@ -8,6 +8,7 @@ import toast from "react-hot-toast"
 import { authFetch, authUploadWithProgress } from "@/lib/client-auth"
 import {
   isAcceptedUploadFile,
+  isPdfUploadFile,
   requiresManualPageCount,
   UPLOAD_ACCEPT_ATTRIBUTE
 } from "@/lib/upload-file"
@@ -64,10 +65,12 @@ type UploadProgressState = {
 }
 
 type UploadResponseData = {
+  code?: string
   error?: string
   estimatedPrice?: number
   order?: DashboardOrder
   pages?: number
+  requiresPdfPassword?: boolean
 }
 
 function formatBytes(bytes: number) {
@@ -123,6 +126,8 @@ export default function UserDashboard() {
 
   const [file, setFile] = useState<File | null>(null)
   const [pageCount, setPageCount] = useState("")
+  const [pdfPassword, setPdfPassword] = useState("")
+  const [needsPdfPassword, setNeedsPdfPassword] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [alternatePhone, setAlternatePhone] = useState("")
   const [printType, setPrintType] = useState("bw")
@@ -156,6 +161,8 @@ export default function UserDashboard() {
   }, [uploadStartedAt])
 
   const uploadPercent = getUploadProgressPercent(uploadProgress)
+  const isPdfFile = isPdfUploadFile(file)
+  const showPdfPasswordField = isPdfFile && (needsPdfPassword || pdfPassword.length > 0)
 
   useEffect(() => {
 
@@ -282,6 +289,11 @@ export default function UserDashboard() {
       manualPageCount = String(parsedPageCount)
     }
 
+    if(isPdfFile && needsPdfPassword && !pdfPassword){
+      toast.error("Enter the PDF password to continue with this locked file.")
+      return
+    }
+
     const user = auth.currentUser
     if(!user) return
 
@@ -318,6 +330,10 @@ export default function UserDashboard() {
 
     if(manualPageCount){
       formData.append("pageCount",manualPageCount)
+    }
+
+    if(isPdfFile && pdfPassword){
+      formData.append("pdfPassword",pdfPassword)
     }
 
     try {
@@ -379,6 +395,9 @@ export default function UserDashboard() {
       const data = await res.json() as UploadResponseData
 
       if (!res.ok || data.error) {
+        if (data.requiresPdfPassword) {
+          setNeedsPdfPassword(true)
+        }
         toast.error(data.error || "Upload failed")
         return
       }
@@ -392,6 +411,8 @@ export default function UserDashboard() {
 
       setFile(null)
       setPageCount("")
+      setPdfPassword("")
+      setNeedsPdfPassword(false)
       if(fileInputRef.current){
         fileInputRef.current.value = ""
       }
@@ -717,6 +738,8 @@ accept={UPLOAD_ACCEPT_ATTRIBUTE}
 onChange={(e)=>{
 const selectedFile = e.target.files?.[0] || null
 setFile(selectedFile)
+setPdfPassword("")
+setNeedsPdfPassword(false)
 
 if(!requiresManualPageCount(selectedFile)){
 setPageCount("")
@@ -727,6 +750,30 @@ setPageCount("")
 <p className="text-xs text-gray-400">
 Accepted: PDF, DOC, DOCX, PNG, JPG, JPEG
 </p>
+
+{showPdfPasswordField && (
+<div className="space-y-2">
+<label className="block text-sm text-gray-400">
+PDF Password
+</label>
+<input
+type="password"
+value={pdfPassword}
+onChange={(e)=>setPdfPassword(e.target.value)}
+placeholder="Enter the password used to open this PDF"
+className="input w-full"
+/>
+<p className="text-xs text-gray-400">
+We use this to read the locked PDF page count and store it with the order so the supplier can open the same file.
+</p>
+</div>
+)}
+
+{isPdfFile && !showPdfPasswordField && (
+<p className="text-xs text-gray-400">
+If this PDF is locked, submit once and we will ask for the password before creating the order.
+</p>
+)}
 
 {requiresManualPageCount(file) && (
 <input

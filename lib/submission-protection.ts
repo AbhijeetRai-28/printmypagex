@@ -90,7 +90,7 @@ function computeRetentionMs(rule: SubmissionLimitRule) {
     rule.duplicateCooldownMs ?? 0
   )
 
-  return Math.max(longestWindow * 4, 30 * 24 * 60 * 60 * 1000)
+  return Math.max(longestWindow + 15 * 60 * 1000, 15 * 60 * 1000)
 }
 
 function buildRuleScope(scope: string, rule: SubmissionLimitRule) {

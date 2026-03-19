@@ -40,6 +40,8 @@ fileURL?: string
 duplex?: boolean
 instruction?: string
 alternatePhone?: string
+pdfPasswordRequired?: boolean
+pdfPassword?: string
 createdAt: string
 acceptedAt?: string | null
 paidAt?: string | null
@@ -575,6 +577,12 @@ Order Details
 <p>Instruction: {selectedOrder.instruction || "None"}</p>
 
 <p>Alternate Phone: {selectedOrder.alternatePhone || "None"}</p>
+
+{selectedOrder.pdfPasswordRequired ? (
+<p>
+PDF Password: {selectedOrder.pdfPassword || "Saved for the supplier once the order is assigned."}
+</p>
+) : null}
 
 <p>Status: {formatStatus(selectedOrder.status)}</p>
 

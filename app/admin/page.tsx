@@ -142,6 +142,8 @@ type AdminOrder = {
   instruction?: string
   printType?: "bw" | "color" | "glossy"
   fileURL?: string
+  pdfPasswordRequired?: boolean
+  pdfPassword?: string
   pages?: number
   verifiedPages?: number | null
   estimatedPrice?: number
@@ -2893,6 +2895,13 @@ export default function AdminPortalPage() {
                   <p className="font-medium mt-1">{workspaceOrderDetail.instruction || "-"}</p>
                 </div>
 
+                {workspaceOrderDetail.pdfPasswordRequired ? (
+                  <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">PDF Password</p>
+                    <p className="font-medium mt-1">{workspaceOrderDetail.pdfPassword || "-"}</p>
+                  </div>
+                ) : null}
+
                 {workspaceOrderDetail.fileURL ? (
                   <a
                     href={workspaceOrderDetail.fileURL}
@@ -3432,6 +3441,13 @@ export default function AdminPortalPage() {
                 <p className="text-gray-500 dark:text-gray-400">Instruction</p>
                 <p className="font-medium">{selectedOrder.instruction || "-"}</p>
               </div>
+
+              {selectedOrder.pdfPasswordRequired ? (
+                <div>
+                  <p className="text-gray-500 dark:text-gray-400">PDF Password</p>
+                  <p className="font-medium">{selectedOrder.pdfPassword || "-"}</p>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

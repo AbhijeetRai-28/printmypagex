@@ -31,6 +31,8 @@ const ORDER_SELECT_FIELDS = [
   "estimatedPrice",
   "finalPrice",
   "fileURL",
+  "pdfPasswordRequired",
+  "pdfPassword",
   "duplex",
   "instruction",
   "alternatePhone",
@@ -133,9 +135,12 @@ export async function GET(req: Request) {
 
   const enrichedOrders = orders.map((order) => {
     const user = userMap.get(String(order.userUID || ""))
+    const canRevealPdfPassword = String(order.supplierUID || "") === supplierUID
 
     return {
       ...order,
+      pdfPassword: canRevealPdfPassword ? String(order.pdfPassword || "") : "",
+      pdfPasswordRequired: Boolean(order.pdfPasswordRequired),
       userName: user?.name || "",
       class: user?.section || "",
       rollNo: user?.rollNo || "",
