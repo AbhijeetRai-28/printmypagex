@@ -1,5 +1,9 @@
 import Navbar from "@/components/Navbar"
-import { getPricingPlans } from "@/lib/print-pricing"
+import {
+  EXTRA_PRICING_CONTENT,
+  formatPricePerOrder,
+  getPricingPlans
+} from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 
 export const dynamic = "force-dynamic"
@@ -22,10 +26,10 @@ Simple Transparent Pricing
 </h1>
 
 <p className="text-center text-gray-600 dark:text-gray-400 mb-20 text-lg">
-No hidden fees. Pay only for what you print.
+No hidden fees. Pay only for what you print, plus optional finishing like spiral binding when selected.
 </p>
 
-<div className="grid md:grid-cols-3 gap-10">
+<div className="grid md:grid-cols-2 xl:grid-cols-4 gap-10">
 
 {plans.map((plan,i)=>(
 <div
@@ -65,6 +69,39 @@ className="relative group backdrop-blur-xl bg-white/10 dark:bg-white/5 border bo
 
 </div>
 ))}
+
+<div className="relative group backdrop-blur-xl bg-white/10 dark:bg-white/5 border border-white/20 dark:border-white/10 rounded-3xl p-10 shadow-xl hover:shadow-2xl transition duration-500 hover:scale-105 overflow-hidden">
+
+<div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-500 bg-gradient-to-br from-emerald-500/20 via-cyan-500/20 to-blue-500/20 blur-2xl"></div>
+
+<div className="relative z-10">
+
+<h2 className="text-2xl font-semibold mb-2">
+{EXTRA_PRICING_CONTENT.spiralBinding.title}
+</h2>
+
+<p className="text-4xl font-bold text-emerald-500 mb-4">
+{formatPricePerOrder(pricing.spiralBinding)}
+</p>
+
+<p className="text-gray-600 dark:text-gray-400 mb-6">
+{EXTRA_PRICING_CONTENT.spiralBinding.description}
+</p>
+
+<ul className="space-y-3 text-sm mb-8">
+
+{EXTRA_PRICING_CONTENT.spiralBinding.features.map((feature,index)=>(
+<li key={index} className="flex items-center gap-2">
+<span className="text-green-400">✔</span>
+{feature}
+</li>
+))}
+
+</ul>
+
+</div>
+
+</div>
 
 </div>
 

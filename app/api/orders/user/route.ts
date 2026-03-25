@@ -37,6 +37,7 @@ const ORDER_SELECT_FIELDS = [
   "pdfPasswordRequired",
   "pdfPassword",
   "duplex",
+  "spiralBinding",
   "instruction",
   "alternatePhone",
   "requestType",

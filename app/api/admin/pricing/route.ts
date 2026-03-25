@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { authenticateAdminRequest } from "@/lib/admin-auth"
 import {
   parsePrintPricingInput,
-  type PrintType
+  type PricingKey
 } from "@/lib/print-pricing"
 import { getPrintPricing, savePrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
@@ -10,7 +10,7 @@ import { recordActivity } from "@/lib/activity-log"
 export const runtime = "nodejs"
 
 type PricingPayload = {
-  prices?: Partial<Record<PrintType, unknown>>
+  prices?: Partial<Record<PricingKey, unknown>>
 }
 
 export async function GET(req: Request) {

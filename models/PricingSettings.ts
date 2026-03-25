@@ -26,6 +26,12 @@ const PricingSettingsSchema = new mongoose.Schema(
         required: true,
         min: 0.01,
         default: 15
+      },
+      spiralBinding: {
+        type: Number,
+        required: true,
+        min: 0.01,
+        default: 30
       }
     }
   },

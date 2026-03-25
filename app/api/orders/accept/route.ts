@@ -6,7 +6,7 @@ import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
-import { calculatePrintPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
 
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const orderMeta = await Order.findById(orderId).select("printType")
+  const orderMeta = await Order.findById(orderId).select("printType spiralBinding")
   if (!orderMeta) {
     return NextResponse.json(
       {
@@ -103,7 +103,9 @@ export async function POST(req: Request) {
   }
 
   const pricing = await getPrintPricing()
-  const finalPrice = calculatePrintPrice(verifiedPages, orderMeta.printType, pricing)
+  const finalPrice = calculateOrderPrice(verifiedPages, orderMeta.printType, pricing, {
+    spiralBinding: Boolean(orderMeta.spiralBinding)
+  })
   const now = new Date()
 
   const order = await Order.findOneAndUpdate(

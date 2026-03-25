@@ -38,6 +38,7 @@ estimatedPrice?: number
 finalPrice?: number | null
 fileURL?: string
 duplex?: boolean
+spiralBinding?: boolean
 instruction?: string
 alternatePhone?: string
 pdfPasswordRequired?: boolean
@@ -573,6 +574,8 @@ Order Details
 <p>Amount Payable: ₹{selectedOrder.finalPrice ?? selectedOrder.estimatedPrice}</p>
 
 <p>Duplex: {selectedOrder.duplex ? "Yes":"No"}</p>
+
+<p>Spiral Binding: {selectedOrder.spiralBinding ? "Yes" : "No"}</p>
 
 <p>Instruction: {selectedOrder.instruction || "None"}</p>
 

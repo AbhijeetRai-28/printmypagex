@@ -19,6 +19,7 @@ type OrderEmailData = {
   status?: string
   estimatedPrice?: number | null
   finalPrice?: number | null
+  spiralBinding?: boolean | null
 }
 
 type UserRecord = {
@@ -59,6 +60,7 @@ function orderSummaryHtml(order: OrderEmailData) {
     <p><strong>Print Type:</strong> ${(order.printType || "bw").toUpperCase()}</p>
     <p><strong>Pages:</strong> ${order.verifiedPages || order.pages || "N/A"}</p>
     <p><strong>Status:</strong> ${String(order.status || "pending").toUpperCase()}</p>
+    <p><strong>Spiral Binding:</strong> ${order.spiralBinding ? "Yes" : "No"}</p>
     <p><strong>Estimated Price:</strong> ${formatMoney(order.estimatedPrice)}</p>
     <p><strong>Final Price:</strong> ${formatMoney(order.finalPrice)}</p>
   `

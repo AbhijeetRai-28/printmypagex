@@ -71,6 +71,7 @@ export default function CreateOrderPage() {
   const [pageCount, setPageCount] = useState("")
   const [pdfPassword, setPdfPassword] = useState("")
   const [needsPdfPassword, setNeedsPdfPassword] = useState(false)
+  const [spiralBinding, setSpiralBinding] = useState(false)
   const [instruction, setInstruction] = useState("")
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -202,6 +203,7 @@ export default function CreateOrderPage() {
     formData.append("userEmail", fallbackEmail)
     formData.append("requestType", requestType)
     formData.append("supplier", supplier)
+    formData.append("spiralBinding", String(spiralBinding))
     formData.append("instruction", instruction.trim())
 
     if (manualPageCount) {
@@ -283,6 +285,7 @@ export default function CreateOrderPage() {
       setPageCount("")
       setPdfPassword("")
       setNeedsPdfPassword(false)
+      setSpiralBinding(false)
       setInstruction("")
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
@@ -326,6 +329,9 @@ export default function CreateOrderPage() {
                     {PRINT_TYPE_CONTENT[key].shortLabel}: ₹{pricing[key]}/page
                   </span>
                 ))}
+                <span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+                  Spiral Binding: ₹{pricing.spiralBinding}/order
+                </span>
               </div>
             </div>
 
@@ -454,6 +460,15 @@ export default function CreateOrderPage() {
                 )}
               </div>
             )}
+
+            <label className="flex items-center gap-3 rounded-xl border border-gray-700 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={spiralBinding}
+                onChange={() => setSpiralBinding((current) => !current)}
+              />
+              <span>Spiral Binding (+₹{pricing.spiralBinding})</span>
+            </label>
 
             <div>
               <label className="block mb-2 text-sm text-gray-400">

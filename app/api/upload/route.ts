@@ -9,7 +9,7 @@ import { sendOrderCreatedNotifications } from "@/lib/order-email"
 import { authenticateUserRequest } from "@/lib/user-auth"
 import { isAcceptedUploadFile, isPdfUploadFile, requiresManualPageCount } from "@/lib/upload-file"
 import cloudinary from "@/lib/cloudinary"
-import { calculatePrintPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import {
   buildSubmissionFingerprint,
@@ -227,6 +227,7 @@ export async function POST(req: Request) {
     // NEW FIELDS
     const alternatePhone = String(formData.get("alternatePhone") || "").trim()
     const duplex = String(formData.get("duplex") || "").trim()
+    const spiralBinding = String(formData.get("spiralBinding") || "").trim()
     const instruction = String(formData.get("instruction") || "").trim()
 
     if (!file) {
@@ -304,6 +305,7 @@ export async function POST(req: Request) {
       manualPageCountValue,
       alternatePhone,
       duplex,
+      spiralBinding,
       instruction
     ])
     const guard = await enforceSubmissionGuards([
@@ -425,7 +427,10 @@ export async function POST(req: Request) {
 
     // Price calculation
     const pricing = await getPrintPricing()
-    const estimatedPrice = calculatePrintPrice(pages, printType, pricing)
+    const wantsSpiralBinding = spiralBinding === "true"
+    const estimatedPrice = calculateOrderPrice(pages, printType, pricing, {
+      spiralBinding: wantsSpiralBinding
+    })
 
     // Detect file type for Cloudinary
     const isImage = file.type.startsWith("image/")
@@ -475,6 +480,8 @@ export async function POST(req: Request) {
       alternatePhone: alternatePhone || "",
 
       duplex: duplex === "true",
+
+      spiralBinding: wantsSpiralBinding,
 
       instruction: instruction || "",
 

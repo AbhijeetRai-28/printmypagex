@@ -5,11 +5,11 @@ import {
   DEFAULT_PRINT_PRICING,
   normalizePrintPricing,
   type PrintPricing,
-  type PrintType
+  type PricingKey
 } from "@/lib/print-pricing"
 
 type PricingResponse = {
-  prices?: Partial<Record<PrintType, number>>
+  prices?: Partial<Record<PricingKey, number>>
 }
 
 export function usePrintPricing() {

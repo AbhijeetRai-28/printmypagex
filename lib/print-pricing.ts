@@ -1,6 +1,9 @@
 export type PrintType = "bw" | "color" | "glossy"
+export const SPIRAL_BINDING_KEY = "spiralBinding" as const
+export type ExtraPricingKey = typeof SPIRAL_BINDING_KEY
+export type PricingKey = PrintType | ExtraPricingKey
 
-export type PrintPricing = Record<PrintType, number>
+export type PrintPricing = Record<PricingKey, number>
 
 type PricingPlanContent = {
   title: string
@@ -10,11 +13,13 @@ type PricingPlanContent = {
 }
 
 export const PRINT_TYPE_KEYS: PrintType[] = ["bw", "color", "glossy"]
+export const PRICING_KEYS: PricingKey[] = [...PRINT_TYPE_KEYS, SPIRAL_BINDING_KEY]
 
 export const DEFAULT_PRINT_PRICING: PrintPricing = {
   bw: 2,
   color: 5,
-  glossy: 15
+  glossy: 15,
+  spiralBinding: 30
 }
 
 export const PRINT_TYPE_CONTENT: Record<PrintType, PricingPlanContent> = {
@@ -34,7 +39,22 @@ export const PRINT_TYPE_CONTENT: Record<PrintType, PricingPlanContent> = {
     title: "Glossy Print",
     shortLabel: "Glossy",
     description: "Premium glossy printing",
-    features: ["Photos", "Posters", "Presentation covers"]
+    features: ["Photos", "Posters", "Presentation covers","Official Documents"]
+  }
+}
+
+export const EXTRA_PRICING_CONTENT: Record<
+  ExtraPricingKey,
+  PricingPlanContent & {
+    priceUnitLabel: string
+  }
+> = {
+  spiralBinding: {
+    title: "Spiral Binding",
+    shortLabel: "Spiral Binding",
+    description: "Add spiral binding for compiled documents",
+    priceUnitLabel: "₹ / order",
+    features: ["Fixed per order charge", "Useful for reports and projects"]
   }
 }
 
@@ -43,9 +63,9 @@ function round2(value: number) {
 }
 
 export function normalizePrintPricing(
-  raw: Partial<Record<PrintType, unknown>> | null | undefined
+  raw: Partial<Record<PricingKey, unknown>> | null | undefined
 ): PrintPricing {
-  return PRINT_TYPE_KEYS.reduce((acc, key) => {
+  return PRICING_KEYS.reduce((acc, key) => {
     const parsed = Number(raw?.[key])
     acc[key] = Number.isFinite(parsed) && parsed > 0 ? round2(parsed) : DEFAULT_PRINT_PRICING[key]
     return acc
@@ -53,17 +73,21 @@ export function normalizePrintPricing(
 }
 
 export function parsePrintPricingInput(
-  raw: Partial<Record<PrintType, unknown>> | null | undefined
+  raw: Partial<Record<PricingKey, unknown>> | null | undefined
 ): { pricing: PrintPricing | null; error: string | null } {
   const nextPricing = {} as PrintPricing
 
-  for (const key of PRINT_TYPE_KEYS) {
+  for (const key of PRICING_KEYS) {
     const parsed = Number(raw?.[key])
+    const title =
+      key === SPIRAL_BINDING_KEY
+        ? EXTRA_PRICING_CONTENT[key].title
+        : PRINT_TYPE_CONTENT[key].title
 
     if (!Number.isFinite(parsed) || parsed <= 0) {
       return {
         pricing: null,
-        error: `${PRINT_TYPE_CONTENT[key].title} price must be greater than 0`
+        error: `${title} price must be greater than 0`
       }
     }
 
@@ -99,8 +123,30 @@ export function calculatePrintPrice(
   return round2(pages * getPriceForPrintType(printType, pricing))
 }
 
+export function getSpiralBindingPrice(pricing: PrintPricing = DEFAULT_PRINT_PRICING) {
+  return round2(pricing.spiralBinding)
+}
+
+export function calculateOrderPrice(
+  pages: number,
+  printType: unknown,
+  pricing: PrintPricing = DEFAULT_PRINT_PRICING,
+  options?: {
+    spiralBinding?: boolean
+  }
+) {
+  const printPrice = calculatePrintPrice(pages, printType, pricing)
+  const bindingPrice = options?.spiralBinding ? getSpiralBindingPrice(pricing) : 0
+
+  return round2(printPrice + bindingPrice)
+}
+
 export function formatPricePerPage(price: number) {
   return `₹${round2(price)} / page`
+}
+
+export function formatPricePerOrder(price: number) {
+  return `₹${round2(price)} / order`
 }
 
 export function getPricingPlans(pricing: PrintPricing) {

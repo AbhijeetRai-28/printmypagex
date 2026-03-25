@@ -5,7 +5,7 @@ import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
-import { calculatePrintPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
 
@@ -109,7 +109,9 @@ export async function POST(req: Request){
     }
 
     const pricing = await getPrintPricing()
-    const finalPrice = calculatePrintPrice(verifiedPages, order.printType, pricing)
+    const finalPrice = calculateOrderPrice(verifiedPages, order.printType, pricing, {
+      spiralBinding: Boolean(order.spiralBinding)
+    })
 
     if(!order.supplierUID){
       order.supplierUID = supplierUID

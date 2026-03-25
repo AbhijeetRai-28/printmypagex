@@ -28,6 +28,11 @@ const OrderSchema = new mongoose.Schema({
     default:false
   },
 
+  spiralBinding:{
+    type:Boolean,
+    default:false
+  },
+
   instruction:{
     type:String,
     default:""

@@ -136,6 +136,7 @@ export default function UserDashboard() {
   const [supplier, setSupplier] = useState("")
 
   const [duplex, setDuplex] = useState(false)
+  const [spiralBinding, setSpiralBinding] = useState(false)
   const [instruction, setInstruction] = useState("")
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null)
   const [elapsedUploadTime, setElapsedUploadTime] = useState(0)
@@ -326,6 +327,7 @@ export default function UserDashboard() {
 
     formData.append("alternatePhone",alternatePhone)
     formData.append("duplex",String(duplex))
+    formData.append("spiralBinding",String(spiralBinding))
     formData.append("instruction",instruction)
 
     if(manualPageCount){
@@ -419,6 +421,7 @@ export default function UserDashboard() {
       setInstruction("")
       setAlternatePhone("")
       setDuplex(false)
+      setSpiralBinding(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed")
     } finally {
@@ -638,6 +641,9 @@ className="rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-xs 
 {PRINT_TYPE_CONTENT[key].shortLabel}: ₹{pricing[key]}/page
 </span>
 ))}
+<span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+Spiral Binding: ₹{pricing.spiralBinding}/order
+</span>
 </div>
 </div>
 
@@ -721,6 +727,15 @@ checked={duplex}
 onChange={()=>setDuplex(!duplex)}
 />
 <span>Duplex Printing</span>
+</div>
+
+<div className="flex items-center gap-3">
+<input
+type="checkbox"
+checked={spiralBinding}
+onChange={()=>setSpiralBinding(!spiralBinding)}
+/>
+<span>Spiral Binding (+₹{pricing.spiralBinding})</span>
 </div>
 
 <textarea

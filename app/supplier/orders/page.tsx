@@ -8,7 +8,7 @@ import { pusherClient } from "@/lib/pusher-client"
 import SupplierGuard from "@/components/SupplierGuard"
 import ProfileCard from "@/components/ProfileCard"
 import { authFetch } from "@/lib/client-auth"
-import { calculatePrintPrice, getPriceForPrintType } from "@/lib/print-pricing"
+import { calculateOrderPrice, getPriceForPrintType } from "@/lib/print-pricing"
 import { usePrintPricing } from "@/lib/use-print-pricing"
 
 type SupplierOrderDetail = {
@@ -30,6 +30,7 @@ type SupplierOrderDetail = {
   finalPrice?: number | null
   fileURL?: string
   duplex?: boolean
+  spiralBinding?: boolean
   instruction?: string
   alternatePhone?: string
   pdfPasswordRequired?: boolean
@@ -623,7 +624,9 @@ Estimated Price: ₹{selectedOrder.estimatedPrice}
 
 <p>
 Updated Final Price (Preview): ₹{verifiedPages > 0
-? calculatePrintPrice(verifiedPages, selectedOrder.printType, pricing)
+? calculateOrderPrice(verifiedPages, selectedOrder.printType, pricing, {
+spiralBinding: selectedOrder.spiralBinding
+})
 : "Enter pages"}
 </p>
 
@@ -638,6 +641,8 @@ Final Price: ₹{selectedOrder.finalPrice}
 )}
 
 <p>Duplex: {selectedOrder.duplex ? "Yes" : "No"}</p>
+
+<p>Spiral Binding: {selectedOrder.spiralBinding ? `Yes (+₹${pricing.spiralBinding})` : "No"}</p>
 
 <p>Instruction: {selectedOrder.instruction?.trim() || "None"}</p>
 

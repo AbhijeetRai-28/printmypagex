@@ -41,12 +41,16 @@ import FaqManager from "@/components/admin/FaqManager"
 import StatusToggle from "@/components/admin/StatusToggle"
 import {
   DEFAULT_PRINT_PRICING,
+  EXTRA_PRICING_CONTENT,
+  PRICING_KEYS,
   PRINT_TYPE_CONTENT,
   PRINT_TYPE_KEYS,
+  SPIRAL_BINDING_KEY,
+  formatPricePerOrder,
   formatPricePerPage,
   normalizePrintPricing,
+  type PricingKey,
   type PrintPricing,
-  type PrintType
 } from "@/lib/print-pricing"
 import {
   defaultFaqContentSnapshot,
@@ -146,6 +150,7 @@ type AdminOrder = {
   requestType?: "global" | "specific"
   alternatePhone?: string
   duplex?: boolean
+  spiralBinding?: boolean
   instruction?: string
   printType?: "bw" | "color" | "glossy"
   fileURL?: string
@@ -406,10 +411,11 @@ export default function AdminPortalPage() {
   })
   const [faqContent, setFaqContent] = useState<FAQContentSnapshot>(defaultFaqContentSnapshot)
   const [pricing, setPricing] = useState<PrintPricing>(DEFAULT_PRINT_PRICING)
-  const [pricingForm, setPricingForm] = useState<Record<PrintType, string>>({
+  const [pricingForm, setPricingForm] = useState<Record<PricingKey, string>>({
     bw: String(DEFAULT_PRINT_PRICING.bw),
     color: String(DEFAULT_PRINT_PRICING.color),
-    glossy: String(DEFAULT_PRINT_PRICING.glossy)
+    glossy: String(DEFAULT_PRINT_PRICING.glossy),
+    spiralBinding: String(DEFAULT_PRINT_PRICING.spiralBinding)
   })
 
   const [adminEmail, setAdminEmail] = useState("")
@@ -532,7 +538,8 @@ export default function AdminPortalPage() {
     setPricingForm({
       bw: String(nextPricing.bw),
       color: String(nextPricing.color),
-      glossy: String(nextPricing.glossy)
+      glossy: String(nextPricing.glossy),
+      spiralBinding: String(nextPricing.spiralBinding)
     })
     setPayments(paymentsRes.payments || [])
     setPayoutRequests(payoutsRes.requests || [])
@@ -686,11 +693,15 @@ export default function AdminPortalPage() {
   const savePricing = async () => {
     const nextPricing = {} as PrintPricing
 
-    for (const key of PRINT_TYPE_KEYS) {
+    for (const key of PRICING_KEYS) {
       const parsed = Number(pricingForm[key])
+      const label =
+        key === SPIRAL_BINDING_KEY
+          ? EXTRA_PRICING_CONTENT[key].title
+          : PRINT_TYPE_CONTENT[key].title
 
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setError(`${PRINT_TYPE_CONTENT[key].title} price must be greater than 0`)
+        setError(`${label} price must be greater than 0`)
         return
       }
 
@@ -715,7 +726,8 @@ export default function AdminPortalPage() {
       setPricingForm({
         bw: String(normalizedPricing.bw),
         color: String(normalizedPricing.color),
-        glossy: String(normalizedPricing.glossy)
+        glossy: String(normalizedPricing.glossy),
+        spiralBinding: String(normalizedPricing.spiralBinding)
       })
       setMessage(response.message || "Pricing updated successfully")
       setLastSyncedAt(new Date())
@@ -2292,7 +2304,7 @@ export default function AdminPortalPage() {
                     Changes here update new order estimates, supplier verification pricing, the public landing pricing cards, and admin-side recalculation flows.
                   </p>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid gap-3 sm:grid-cols-4">
                     {PRINT_TYPE_KEYS.map((key) => (
                       <div
                         key={key}
@@ -2302,6 +2314,10 @@ export default function AdminPortalPage() {
                         <p className="mt-2 text-2xl font-semibold">{formatPricePerPage(pricing[key])}</p>
                       </div>
                     ))}
+                    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/85 dark:bg-white/5 p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{EXTRA_PRICING_CONTENT.spiralBinding.title}</p>
+                      <p className="mt-2 text-2xl font-semibold">{formatPricePerOrder(pricing.spiralBinding)}</p>
+                    </div>
                   </div>
                 </div>
 
@@ -2311,14 +2327,15 @@ export default function AdminPortalPage() {
                       <p className="text-xs uppercase tracking-[0.18em] text-indigo-500 dark:text-cyan-300">
                         Edit Rates
                       </p>
-                      <h3 className="mt-2 text-xl font-semibold">Update per-page prices</h3>
+                      <h3 className="mt-2 text-xl font-semibold">Update pricing</h3>
                     </div>
                     <button
                       onClick={() =>
                         setPricingForm({
                           bw: String(pricing.bw),
                           color: String(pricing.color),
-                          glossy: String(pricing.glossy)
+                          glossy: String(pricing.glossy),
+                          spiralBinding: String(pricing.spiralBinding)
                         })
                       }
                       className="px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-white/5 text-xs"
@@ -2350,6 +2367,27 @@ export default function AdminPortalPage() {
                         </div>
                       </label>
                     ))}
+
+                    <label className="block text-sm">
+                      <span className="text-gray-600 dark:text-gray-300">{EXTRA_PRICING_CONTENT.spiralBinding.title}</span>
+                      <div className="mt-2 flex items-center rounded-2xl border border-gray-200 dark:border-white/20 bg-white/80 dark:bg-black/20 px-4">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">₹</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={pricingForm.spiralBinding}
+                          onChange={(event) =>
+                            setPricingForm((prev) => ({
+                              ...prev,
+                              spiralBinding: event.target.value
+                            }))
+                          }
+                          className="w-full bg-transparent px-3 py-3 outline-none"
+                        />
+                        <span className="text-xs text-gray-500 dark:text-gray-400">/ order</span>
+                      </div>
+                    </label>
                   </div>
 
                   <p className="mt-4 text-xs leading-6 text-gray-500 dark:text-gray-400">
@@ -3154,6 +3192,10 @@ export default function AdminPortalPage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Pages</p>
                   <p className="font-semibold mt-1">{workspaceOrderDetail.verifiedPages ?? workspaceOrderDetail.pages ?? 0}</p>
                 </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Spiral Binding</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail.spiralBinding ? "Requested" : "No"}</p>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -3721,6 +3763,11 @@ export default function AdminPortalPage() {
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Instruction</p>
                 <p className="font-medium">{selectedOrder.instruction || "-"}</p>
+              </div>
+
+              <div>
+                <p className="text-gray-500 dark:text-gray-400">Spiral Binding</p>
+                <p className="font-medium">{selectedOrder.spiralBinding ? "Requested" : "No"}</p>
               </div>
 
               {selectedOrder.pdfPasswordRequired ? (
