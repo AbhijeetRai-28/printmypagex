@@ -29,6 +29,7 @@ type UploadProgressState = {
 }
 
 type UploadResponseData = {
+  copies?: number
   error?: string
   code?: string
   estimatedPrice?: number
@@ -69,6 +70,7 @@ export default function CreateOrderPage() {
   const [requestType, setRequestType] = useState("global")
   const [supplier, setSupplier] = useState("")
   const [pageCount, setPageCount] = useState("")
+  const [copies, setCopies] = useState("1")
   const [pdfPassword, setPdfPassword] = useState("")
   const [needsPdfPassword, setNeedsPdfPassword] = useState(false)
   const [spiralBinding, setSpiralBinding] = useState(false)
@@ -172,6 +174,13 @@ export default function CreateOrderPage() {
       return
     }
 
+    const parsedCopies = Number(copies)
+
+    if (!Number.isInteger(parsedCopies) || parsedCopies < 1) {
+      toast.error("Enter a valid number of copies.")
+      return
+    }
+
     const user = auth.currentUser
 
     if (!user) return
@@ -203,6 +212,7 @@ export default function CreateOrderPage() {
     formData.append("userEmail", fallbackEmail)
     formData.append("requestType", requestType)
     formData.append("supplier", supplier)
+    formData.append("copies", String(parsedCopies))
     formData.append("spiralBinding", String(spiralBinding))
     formData.append("instruction", instruction.trim())
 
@@ -280,9 +290,10 @@ export default function CreateOrderPage() {
         return
       }
 
-      toast.success(`Pages: ${data.pages} | Estimated Price: ₹${data.estimatedPrice}`)
+      toast.success(`Pages: ${data.pages} | Copies: ${data.copies ?? parsedCopies} | Estimated Price: ₹${data.estimatedPrice}`)
       setFile(null)
       setPageCount("")
+      setCopies("1")
       setPdfPassword("")
       setNeedsPdfPassword(false)
       setSpiralBinding(false)
@@ -484,6 +495,21 @@ export default function CreateOrderPage() {
               <p className="mt-2 text-xs text-gray-400">
                 Optional. Visible to the supplier. {instruction.length}/500
               </p>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm text-gray-400">
+                No. of Copies
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={copies}
+                onChange={(e) => setCopies(e.target.value.replace(/\D/g, ""))}
+                placeholder="Copies"
+                className="w-32 bg-dark p-3 rounded-lg border border-gray-700"
+              />
             </div>
 
             <button

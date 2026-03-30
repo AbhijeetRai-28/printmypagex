@@ -58,6 +58,12 @@ const OrderSchema = new mongoose.Schema({
     required:true
   },
 
+  copies:{
+    type:Number,
+    default:1,
+    min:1
+  },
+
   verifiedPages:{
     type:Number,
     default:null

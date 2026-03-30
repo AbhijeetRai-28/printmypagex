@@ -4,6 +4,7 @@ import Order from "@/models/Order"
 import User from "@/models/User"
 import Supplier from "@/models/Supplier"
 import { authenticateUserRequest } from "@/lib/user-auth"
+import { getTotalPrintablePages, normalizeCopies } from "@/lib/print-pricing"
 
 export async function GET(req: Request) {
   try {
@@ -77,6 +78,9 @@ export async function GET(req: Request) {
       : null
 
     const amount = Number(order.finalPrice ?? order.estimatedPrice ?? 0)
+    const pagesPerCopy = Number(order.verifiedPages ?? order.pages ?? 0)
+    const copies = normalizeCopies(order.copies)
+    const totalPrintPages = getTotalPrintablePages(pagesPerCopy, copies)
     const paidDate = order.paidAt
       ? new Date(order.paidAt).toLocaleString()
       : new Date().toLocaleString()
@@ -102,7 +106,9 @@ Razorpay Payment ID  : ${order.razorpayPaymentId || "N/A"}
 PRINTING DETAILS
 ----------------------------------------------------------------------
 Print Type           : ${order.printType}
-Total Pages          : ${order.verifiedPages || order.pages}
+Pages Per Copy       : ${pagesPerCopy}
+Copies               : ${copies}
+Total Print Pages    : ${totalPrintPages}
 Amount Paid          : INR ${amount}
 Payment Status       : ${order.paymentStatus.toUpperCase()}
 

@@ -12,6 +12,7 @@ import ProfileAvatar from "@/components/ProfileAvatar"
 import { authFetch } from "@/lib/client-auth"
 import OwnerBadge from "@/components/OwnerBadge"
 import { isOwnerEmail } from "@/lib/owner-access"
+import { getTotalPrintablePages } from "@/lib/print-pricing"
 
 type SupplierProfile = {
 name?: string
@@ -31,9 +32,10 @@ _id: string
 supplierUID?: string | null
 status: string
 paymentStatus: string
-printType?: string
-pages?: number
-verifiedPages?: number
+  printType?: string
+  pages?: number
+  copies?: number
+  verifiedPages?: number
 estimatedPrice?: number
 finalPrice?: number | null
 fileURL?: string
@@ -483,9 +485,23 @@ className={`px-4 py-1 text-xs rounded-full font-semibold tracking-wide ${getStat
 <div className="space-y-3 text-gray-600 dark:text-gray-300 text-sm">
 
 <div className="flex justify-between">
-<span>Pages</span>
+<span>Pages / Copy</span>
 <span className="font-semibold text-gray-900 dark:text-white">
-{order.verifiedPages || order.pages}
+{order.verifiedPages ?? order.pages}
+</span>
+</div>
+
+<div className="flex justify-between">
+<span>Copies</span>
+<span className="font-semibold text-gray-900 dark:text-white">
+{order.copies ?? 1}
+</span>
+</div>
+
+<div className="flex justify-between">
+<span>Total Print Pages</span>
+<span className="font-semibold text-gray-900 dark:text-white">
+{getTotalPrintablePages(order.verifiedPages ?? order.pages ?? 0, order.copies)}
 </span>
 </div>
 
@@ -565,7 +581,9 @@ className="mt-4 w-full bg-green-500 px-4 py-2 rounded-xl font-semibold disabled:
 Order Details
 </h2>
 
-<p>Pages: {selectedOrder.verifiedPages || selectedOrder.pages}</p>
+<p>Pages Per Copy: {selectedOrder.verifiedPages ?? selectedOrder.pages}</p>
+<p>Copies: {selectedOrder.copies ?? 1}</p>
+<p>Total Print Pages: {getTotalPrintablePages(selectedOrder.verifiedPages ?? selectedOrder.pages ?? 0, selectedOrder.copies)}</p>
 <p>Print Type: {selectedOrder.printType}</p>
 <p>Estimated Price: ₹{selectedOrder.estimatedPrice}</p>
 

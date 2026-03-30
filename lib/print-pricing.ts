@@ -62,6 +62,11 @@ function round2(value: number) {
   return Math.round(value * 100) / 100
 }
 
+export function normalizeCopies(copies: unknown) {
+  const parsed = Number(copies)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1
+}
+
 export function normalizePrintPricing(
   raw: Partial<Record<PricingKey, unknown>> | null | undefined
 ): PrintPricing {
@@ -114,17 +119,26 @@ export function getPriceForPrintType(
 export function calculatePrintPrice(
   pages: number,
   printType: unknown,
-  pricing: PrintPricing = DEFAULT_PRINT_PRICING
+  pricing: PrintPricing = DEFAULT_PRINT_PRICING,
+  copies: unknown = 1
 ) {
   if (!Number.isFinite(pages) || pages <= 0) {
     return 0
   }
 
-  return round2(pages * getPriceForPrintType(printType, pricing))
+  return round2(pages * normalizeCopies(copies) * getPriceForPrintType(printType, pricing))
 }
 
 export function getSpiralBindingPrice(pricing: PrintPricing = DEFAULT_PRINT_PRICING) {
   return round2(pricing.spiralBinding)
+}
+
+export function getTotalPrintablePages(pages: number, copies: unknown = 1) {
+  if (!Number.isFinite(pages) || pages <= 0) {
+    return 0
+  }
+
+  return Math.round(pages * normalizeCopies(copies))
 }
 
 export function calculateOrderPrice(
@@ -133,9 +147,10 @@ export function calculateOrderPrice(
   pricing: PrintPricing = DEFAULT_PRINT_PRICING,
   options?: {
     spiralBinding?: boolean
+    copies?: number
   }
 ) {
-  const printPrice = calculatePrintPrice(pages, printType, pricing)
+  const printPrice = calculatePrintPrice(pages, printType, pricing, options?.copies)
   const bindingPrice = options?.spiralBinding ? getSpiralBindingPrice(pricing) : 0
 
   return round2(printPrice + bindingPrice)

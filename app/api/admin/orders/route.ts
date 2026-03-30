@@ -9,7 +9,7 @@ import {
   sendOrderCancelledNotification,
   sendOrderStatusNotification
 } from "@/lib/order-email"
-import { calculateOrderPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice, normalizeCopies } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
 
@@ -223,7 +223,9 @@ export async function PATCH(req: Request) {
     }
 
     const pricing = await getPrintPricing()
+    const copies = normalizeCopies(order.copies)
     const baseAmount = calculateOrderPrice(nextPages, order.printType, pricing, {
+      copies,
       spiralBinding: Boolean(order.spiralBinding)
     })
 

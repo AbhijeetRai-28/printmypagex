@@ -6,7 +6,7 @@ import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
-import { calculateOrderPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice, normalizeCopies } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
 
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     )
   }
 
-  const orderMeta = await Order.findById(orderId).select("printType spiralBinding")
+  const orderMeta = await Order.findById(orderId).select("printType spiralBinding copies")
   if (!orderMeta) {
     return NextResponse.json(
       {
@@ -102,8 +102,10 @@ export async function POST(req: Request) {
     )
   }
 
+  const copies = normalizeCopies(orderMeta.copies)
   const pricing = await getPrintPricing()
   const finalPrice = calculateOrderPrice(verifiedPages, orderMeta.printType, pricing, {
+    copies,
     spiralBinding: Boolean(orderMeta.spiralBinding)
   })
   const now = new Date()
@@ -131,7 +133,7 @@ export async function POST(req: Request) {
               time: now
             },
             {
-              message: `Supplier verified ${verifiedPages} pages`,
+              message: `Supplier verified ${verifiedPages} pages for ${copies} copies`,
               time: now
             }
           ]
@@ -168,7 +170,8 @@ export async function POST(req: Request) {
   console.log("ORDER_EMAIL_DEBUG: Triggered awaiting payment notification", {
     orderId: String(order._id),
     supplierUID,
-    verifiedPages
+    verifiedPages,
+    copies
   })
 
   await recordActivity({
@@ -179,12 +182,13 @@ export async function POST(req: Request) {
     entityType: "order",
     entityId: String(order._id),
     level: "success",
-    message: `Supplier accepted order ${String(order._id).slice(-8)} and verified ${verifiedPages} pages`,
+    message: `Supplier accepted order ${String(order._id).slice(-8)} and verified ${verifiedPages} pages for ${copies} copies`,
     metadata: {
       orderId: String(order._id),
       userUID: String(order.userUID),
       supplierUID,
       verifiedPages,
+      copies,
       finalPrice: Number(order.finalPrice ?? 0)
     }
   })

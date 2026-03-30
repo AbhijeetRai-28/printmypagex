@@ -46,6 +46,7 @@ import {
   PRINT_TYPE_CONTENT,
   PRINT_TYPE_KEYS,
   SPIRAL_BINDING_KEY,
+  getTotalPrintablePages,
   formatPricePerOrder,
   formatPricePerPage,
   normalizePrintPricing,
@@ -157,6 +158,7 @@ type AdminOrder = {
   pdfPasswordRequired?: boolean
   pdfPassword?: string
   pages?: number
+  copies?: number
   verifiedPages?: number | null
   estimatedPrice?: number
   finalPrice?: number | null
@@ -2224,6 +2226,8 @@ export default function AdminPortalPage() {
                         requestType: order.requestType || "",
                         printType: order.printType || "",
                         pages: order.verifiedPages ?? order.pages ?? 0,
+                        copies: order.copies ?? 1,
+                        totalPrintPages: getTotalPrintablePages(order.verifiedPages ?? order.pages ?? 0, order.copies),
                         amount: order.finalPrice ?? order.estimatedPrice ?? 0,
                         createdAt: formatDateTime(order.createdAt)
                       }))
@@ -2271,7 +2275,7 @@ export default function AdminPortalPage() {
                           </span>
                         </td>
                         <td className="p-3">
-                          {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages
+                          {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages • {order.copies ?? 1} copies
                         </td>
                         <td className="p-3">{formatCurrency(order.finalPrice ?? order.estimatedPrice)}</td>
                         <td className="p-3">{formatDateTime(order.createdAt)}</td>
@@ -3108,7 +3112,7 @@ export default function AdminPortalPage() {
                     <div className="text-xs space-y-1 text-gray-600 dark:text-gray-300">
                       <p>User: {order.user?.name || order.userUID}</p>
                       <p>Supplier: {order.supplier?.name || order.supplierUID || "Unassigned"}</p>
-                      <p>Print: {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages</p>
+                      <p>Print: {String(order.printType || "-").toUpperCase()} • {order.verifiedPages ?? order.pages ?? 0} pages • {order.copies ?? 1} copies</p>
                       <p>Amount: {formatCurrency(order.finalPrice ?? order.estimatedPrice)}</p>
                     </div>
 
@@ -3191,6 +3195,10 @@ export default function AdminPortalPage() {
                 <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Pages</p>
                   <p className="font-semibold mt-1">{workspaceOrderDetail.verifiedPages ?? workspaceOrderDetail.pages ?? 0}</p>
+                </div>
+                <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Copies</p>
+                  <p className="font-semibold mt-1">{workspaceOrderDetail.copies ?? 1}</p>
                 </div>
                 <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Spiral Binding</p>
@@ -3604,6 +3612,10 @@ export default function AdminPortalPage() {
               <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Pages</p>
                 <p className="font-semibold mt-1">{selectedOrder.verifiedPages ?? selectedOrder.pages ?? 0}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Copies</p>
+                <p className="font-semibold mt-1">{selectedOrder.copies ?? 1}</p>
               </div>
               <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-white/5 p-3 col-span-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Amount</p>

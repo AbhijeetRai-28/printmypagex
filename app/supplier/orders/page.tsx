@@ -8,7 +8,7 @@ import { pusherClient } from "@/lib/pusher-client"
 import SupplierGuard from "@/components/SupplierGuard"
 import ProfileCard from "@/components/ProfileCard"
 import { authFetch } from "@/lib/client-auth"
-import { calculateOrderPrice, getPriceForPrintType } from "@/lib/print-pricing"
+import { calculateOrderPrice, getPriceForPrintType, getTotalPrintablePages } from "@/lib/print-pricing"
 import { usePrintPricing } from "@/lib/use-print-pricing"
 
 type SupplierOrderDetail = {
@@ -20,6 +20,7 @@ type SupplierOrderDetail = {
   paidAt?: string | null
   deliveredAt?: string | null
   pages?: number
+  copies?: number
   verifiedPages?: number | null
   userName?: string
   phone?: string
@@ -466,9 +467,23 @@ className={`px-5 py-1.5 text-xs rounded-full font-semibold tracking-wide ${getSt
 <div className="space-y-3 text-gray-600 dark:text-gray-300 text-sm">
 
 <div className="flex justify-between">
-<span>Pages</span>
+<span>Pages / Copy</span>
 <span className="font-semibold text-gray-900 dark:text-white">
-{order.verifiedPages || order.pages}
+{order.verifiedPages ?? order.pages}
+</span>
+</div>
+
+<div className="flex justify-between">
+<span>Copies</span>
+<span className="font-semibold text-gray-900 dark:text-white">
+{order.copies ?? 1}
+</span>
+</div>
+
+<div className="flex justify-between">
+<span>Total Print Pages</span>
+<span className="font-semibold text-gray-900 dark:text-white">
+{getTotalPrintablePages(order.verifiedPages ?? order.pages ?? 0, order.copies)}
 </span>
 </div>
 
@@ -603,7 +618,7 @@ profile={selectedOrder.userProfile}
 )}
 
 <p>
-Pages:
+Pages Per Copy:
 <input
 type="number"
 value={verifiedPages}
@@ -611,6 +626,10 @@ onChange={(e)=>setVerifiedPages(Number(e.target.value))}
 className="ml-3 w-20 rounded bg-white/80 dark:bg-black border border-gray-300 dark:border-white/20 px-2 py-1 text-gray-900 dark:text-white"
 />
 </p>
+
+<p>Copies: {selectedOrder.copies ?? 1}</p>
+
+<p>Total Print Pages: {getTotalPrintablePages(verifiedPages, selectedOrder.copies)}</p>
 
 <p>Print Type: {selectedOrder.printType}</p>
 
@@ -625,6 +644,7 @@ Estimated Price: ₹{selectedOrder.estimatedPrice}
 <p>
 Updated Final Price (Preview): ₹{verifiedPages > 0
 ? calculateOrderPrice(verifiedPages, selectedOrder.printType, pricing, {
+copies: selectedOrder.copies ?? 1,
 spiralBinding: selectedOrder.spiralBinding
 })
 : "Enter pages"}
@@ -810,7 +830,8 @@ Confirm Page Verification
 </h3>
 <p className="text-slate-600 dark:text-gray-200 text-sm leading-relaxed">
 Have you verified the page count carefully? This will accept the order with{" "}
-<span className="font-semibold text-slate-900 dark:text-white">{verifiedPages}</span> pages and move it to payment.
+<span className="font-semibold text-slate-900 dark:text-white">{verifiedPages}</span> pages per copy for{" "}
+<span className="font-semibold text-slate-900 dark:text-white">{selectedOrder.copies ?? 1}</span> copies and move it to payment.
 </p>
 
 <div className="flex gap-3 mt-6">

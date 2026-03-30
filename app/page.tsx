@@ -133,10 +133,40 @@ async function getFeedbackShowcaseData() {
 }
 
 export default async function Home(){
-const [feedbackShowcase, platformSettings] = await Promise.all([
+const [feedbackResult, platformSettingsResult] = await Promise.allSettled([
   getFeedbackShowcaseData(),
   getPlatformSettings()
 ])
+
+const feedbackShowcase =
+feedbackResult.status === "fulfilled"
+  ? feedbackResult.value
+  : {
+      averageRating: 5,
+      feedbackCount: 0,
+      topHighlights: ["Campus ready", "Clean workflow", "Fast feel"],
+      items: [
+        { quote: "Early visitors are starting to share how the flow feels in real use.", rating: 5 },
+        { quote: "This space will turn live feedback into a moving wall of short campus reactions.", rating: 5 },
+        { quote: "Once more responses arrive, the landing page will update itself with real quotes.", rating: 5 }
+      ]
+    }
+
+const platformSettings =
+platformSettingsResult.status === "fulfilled"
+  ? platformSettingsResult.value
+  : {
+      landingFeedbackVisible: true,
+      updatedAt: null
+    }
+
+if (feedbackResult.status === "rejected") {
+  console.error("LANDING_FEEDBACK_LOAD_ERROR:", feedbackResult.reason)
+}
+
+if (platformSettingsResult.status === "rejected") {
+  console.error("LANDING_PLATFORM_SETTINGS_LOAD_ERROR:", platformSettingsResult.reason)
+}
 
 return(
 

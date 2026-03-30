@@ -225,10 +225,12 @@ export async function POST(req: Request) {
     const pdfPassword = typeof rawPdfPassword === "string" ? rawPdfPassword : ""
 
     // NEW FIELDS
+    const copiesValue = String(formData.get("copies") || "").trim()
     const alternatePhone = String(formData.get("alternatePhone") || "").trim()
     const duplex = String(formData.get("duplex") || "").trim()
     const spiralBinding = String(formData.get("spiralBinding") || "").trim()
     const instruction = String(formData.get("instruction") || "").trim()
+    const copies = copiesValue === "" ? 1 : Number(copiesValue)
 
     if (!file) {
       return NextResponse.json(
@@ -286,6 +288,13 @@ export async function POST(req: Request) {
       )
     }
 
+    if (!Number.isInteger(copies) || copies < 1) {
+      return NextResponse.json(
+        { error: "Copies must be a whole number greater than 0" },
+        { status: 400 }
+      )
+    }
+
     // Allowed file types
     if (!isAcceptedUploadFile(file)) {
       return NextResponse.json(
@@ -303,6 +312,7 @@ export async function POST(req: Request) {
       requestType,
       supplier,
       manualPageCountValue,
+      copies,
       alternatePhone,
       duplex,
       spiralBinding,
@@ -429,6 +439,7 @@ export async function POST(req: Request) {
     const pricing = await getPrintPricing()
     const wantsSpiralBinding = spiralBinding === "true"
     const estimatedPrice = calculateOrderPrice(pages, printType, pricing, {
+      copies,
       spiralBinding: wantsSpiralBinding
     })
 
@@ -493,6 +504,8 @@ export async function POST(req: Request) {
 
       pages,
 
+      copies,
+
       printType,
 
       estimatedPrice,
@@ -536,6 +549,7 @@ export async function POST(req: Request) {
         requestType: String(order.requestType || ""),
         estimatedPrice: Number(order.estimatedPrice || 0),
         pages: Number(order.pages || 0),
+        copies: Number(order.copies || 1),
         printType: String(order.printType || "")
       }
     })
@@ -543,6 +557,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       pages,
+      copies,
       estimatedPrice,
       order
     })

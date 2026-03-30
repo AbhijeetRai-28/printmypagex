@@ -1,6 +1,7 @@
 import Supplier from "@/models/Supplier"
 import User from "@/models/User"
 import { sendAppEmail } from "@/lib/email"
+import { getTotalPrintablePages, normalizeCopies } from "@/lib/print-pricing"
 
 type EmailPayload = {
   to: string
@@ -15,6 +16,7 @@ type OrderEmailData = {
   requestType?: "global" | "specific" | string
   printType?: string
   pages?: number
+  copies?: number | null
   verifiedPages?: number | null
   status?: string
   estimatedPrice?: number | null
@@ -55,10 +57,15 @@ async function sendEmail(payload: EmailPayload) {
 }
 
 function orderSummaryHtml(order: OrderEmailData) {
+  const pagesPerCopy = Number(order.verifiedPages ?? order.pages ?? 0)
+  const copies = normalizeCopies(order.copies)
+
   return `
     <p><strong>Order ID:</strong> ${String(order._id)}</p>
     <p><strong>Print Type:</strong> ${(order.printType || "bw").toUpperCase()}</p>
-    <p><strong>Pages:</strong> ${order.verifiedPages || order.pages || "N/A"}</p>
+    <p><strong>Pages Per Copy:</strong> ${pagesPerCopy || "N/A"}</p>
+    <p><strong>Copies:</strong> ${copies}</p>
+    <p><strong>Total Print Pages:</strong> ${getTotalPrintablePages(pagesPerCopy, copies)}</p>
     <p><strong>Status:</strong> ${String(order.status || "pending").toUpperCase()}</p>
     <p><strong>Spiral Binding:</strong> ${order.spiralBinding ? "Yes" : "No"}</p>
     <p><strong>Estimated Price:</strong> ${formatMoney(order.estimatedPrice)}</p>

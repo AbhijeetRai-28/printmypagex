@@ -5,7 +5,7 @@ import { pusherServer } from "@/lib/pusher-server"
 import { sendAwaitingPaymentNotification } from "@/lib/order-email"
 import { authenticateSupplierRequest } from "@/lib/supplier-auth"
 import { applyOrderLifecycleRules } from "@/lib/order-lifecycle"
-import { calculateOrderPrice } from "@/lib/print-pricing"
+import { calculateOrderPrice, normalizeCopies } from "@/lib/print-pricing"
 import { getPrintPricing } from "@/lib/print-pricing-store"
 import { recordActivity } from "@/lib/activity-log"
 
@@ -108,8 +108,10 @@ export async function POST(req: Request) {
       )
     }
 
+    const copies = normalizeCopies(order.copies)
     const pricing = await getPrintPricing()
     const finalPrice = calculateOrderPrice(verifiedPages, order.printType, pricing, {
+      copies,
       spiralBinding: Boolean(order.spiralBinding)
     })
 
@@ -126,7 +128,7 @@ export async function POST(req: Request) {
     order.finalPrice = finalPrice
     order.status = "awaiting_payment"
     order.logs.push({
-      message: `Supplier verified ${verifiedPages} pages`,
+      message: `Supplier verified ${verifiedPages} pages for ${copies} copies`,
       time: new Date()
     })
 
@@ -154,12 +156,13 @@ export async function POST(req: Request) {
       entityType: "order",
       entityId: String(order._id),
       level: "success",
-      message: `Supplier verified order ${String(order._id).slice(-8)} with ${verifiedPages} pages`,
+      message: `Supplier verified order ${String(order._id).slice(-8)} with ${verifiedPages} pages for ${copies} copies`,
       metadata: {
         orderId: String(order._id),
         userUID: String(order.userUID),
         supplierUID,
         verifiedPages,
+        copies,
         finalPrice
       }
     })

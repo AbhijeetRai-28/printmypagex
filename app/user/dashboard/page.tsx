@@ -66,6 +66,7 @@ type UploadProgressState = {
 
 type UploadResponseData = {
   code?: string
+  copies?: number
   error?: string
   estimatedPrice?: number
   order?: DashboardOrder
@@ -126,6 +127,7 @@ export default function UserDashboard() {
 
   const [file, setFile] = useState<File | null>(null)
   const [pageCount, setPageCount] = useState("")
+  const [copies, setCopies] = useState("1")
   const [pdfPassword, setPdfPassword] = useState("")
   const [needsPdfPassword, setNeedsPdfPassword] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -295,6 +297,13 @@ export default function UserDashboard() {
       return
     }
 
+    const parsedCopies = Number(copies)
+
+    if(!Number.isInteger(parsedCopies) || parsedCopies < 1){
+      toast.error("Enter a valid number of copies.")
+      return
+    }
+
     const user = auth.currentUser
     if(!user) return
 
@@ -324,6 +333,7 @@ export default function UserDashboard() {
 
     formData.append("requestType",requestType)
     formData.append("supplier",supplier)
+    formData.append("copies", String(parsedCopies))
 
     formData.append("alternatePhone",alternatePhone)
     formData.append("duplex",String(duplex))
@@ -404,7 +414,7 @@ export default function UserDashboard() {
         return
       }
 
-      toast.success(`Pages: ${data.pages} | Estimated Price: ₹${data.estimatedPrice}`)
+      toast.success(`Pages: ${data.pages} | Copies: ${data.copies ?? parsedCopies} | Estimated Price: ₹${data.estimatedPrice}`)
 
       const nextOrder = data.order
       if (nextOrder) {
@@ -413,6 +423,7 @@ export default function UserDashboard() {
 
       setFile(null)
       setPageCount("")
+      setCopies("1")
       setPdfPassword("")
       setNeedsPdfPassword(false)
       if(fileInputRef.current){
@@ -744,6 +755,21 @@ value={instruction}
 onChange={(e)=>setInstruction(e.target.value)}
 className="input w-full h-24"
 />
+
+<div>
+<label className="block mb-2 text-sm text-gray-400">
+No. of Copies
+</label>
+<input
+type="number"
+min="1"
+required
+placeholder="Copies"
+value={copies}
+onChange={(e)=>setCopies(e.target.value.replace(/\D/g,""))}
+className="input w-32"
+/>
+</div>
 
 <input
 ref={fileInputRef}

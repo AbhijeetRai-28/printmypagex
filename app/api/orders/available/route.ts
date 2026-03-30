@@ -27,6 +27,7 @@ const ORDER_SELECT_FIELDS = [
   "paymentStatus",
   "printType",
   "pages",
+  "copies",
   "verifiedPages",
   "estimatedPrice",
   "finalPrice",

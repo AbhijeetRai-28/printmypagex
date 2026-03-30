@@ -8,6 +8,7 @@ type SendAppEmailInput = {
 }
 
 let cachedTransporter: nodemailer.Transporter | null = null
+const EMAIL_TIMEOUT_MS = Number(process.env.EMAIL_TIMEOUT_MS || 15000)
 
 function extractEmail(raw: string | undefined) {
   if (!raw) return ""
@@ -37,11 +38,22 @@ function getTransporter() {
   const smtpUser = process.env.SMTP_USER
   const smtpPass = process.env.SMTP_PASS
 
+  const smtpFieldsPresent = [smtpHost, smtpPort || null, smtpUser, smtpPass].filter(Boolean).length
+
+  if (smtpFieldsPresent > 0 && smtpFieldsPresent < 4) {
+    throw new Error(
+      "SMTP_NOT_CONFIGURED: Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS together."
+    )
+  }
+
   if (smtpHost && smtpPort && smtpUser && smtpPass) {
     cachedTransporter = nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
       secure: smtpPort === 465,
+      connectionTimeout: EMAIL_TIMEOUT_MS,
+      greetingTimeout: EMAIL_TIMEOUT_MS,
+      socketTimeout: EMAIL_TIMEOUT_MS,
       auth: {
         user: smtpUser,
         pass: smtpPass
@@ -63,6 +75,9 @@ function getTransporter() {
   if (gmailUser && gmailAppPassword) {
     cachedTransporter = nodemailer.createTransport({
       service: "gmail",
+      connectionTimeout: EMAIL_TIMEOUT_MS,
+      greetingTimeout: EMAIL_TIMEOUT_MS,
+      socketTimeout: EMAIL_TIMEOUT_MS,
       auth: {
         user: gmailUser,
         pass: gmailAppPassword
